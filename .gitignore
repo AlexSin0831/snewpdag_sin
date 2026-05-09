@@ -5,3 +5,5 @@
 output/**
 jobs/**
 SNEWS_ALERTS/**
+.DS_Store
+.vscode/
