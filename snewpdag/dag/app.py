@@ -4,6 +4,16 @@ SNEWPDAG application.
 See README for details of the configuration and input data files.
 """
 
+"""
+The job of app.py:
+Read command-line arguments
+→ read DAG configuration
+→ read input alert data
+→ build the DAG
+→ inject the data into the correct starting node
+→ let the Node system propagate it downstream
+"""
+
 import os, sys, argparse, json, logging, importlib, ast, csv
 #from SNEWS_PT.snews_sub import Subscriber
 import numpy as np

@@ -1,5 +1,5 @@
 """
-CelestialPixels - keep maps of ICRS to GCRS directions
+CelestialPixels - keep maps of ICRS to GCRS directions (ICRS 係 fixed coordinate system like celestial sphere)
 
 to use, just instantiate and call get_map().
 If the same (nside,time) is requested, where time is a Unix timestamp to
@@ -15,10 +15,12 @@ from astropy.coordinates import GCRS, SkyCoord, CartesianRepresentation
 
 class CelestialPixels:
 
-  maps = {}
+  maps = {} # the cache in this class 
+  # Note that this cache is not defined inside the __int__ method! 
+  # Maps 係一個遊走於整個 code 嘅 dictionary！
 
   def __init__(self):
-    pass
+    pass # lazy class
 
   def delete_all_maps(self):
     CelestialPixels.maps = {}
@@ -40,11 +42,15 @@ class CelestialPixels:
       return CelestialPixels.maps[tag]
 
     # need to create a map
-    t = Time(time_tag, format='unix')
-    npix = hp.nside2npix(nside)
+    t = Time(time_tag, format='unix') # unix 嘅 time format 係唔 work 的 所以我地要將佢變成 astropy 嘅 format！
+    npix = hp.nside2npix(nside) # npix = 12 x nside^2
     # pixel centers in ICRS coordinates.
     # c will an array of lon,lat with shape (2,npix).
-    c = hp.pixelfunc.pix2ang(nside, range(npix), nest=True, lonlat=True)
+    # c = (
+    #     [lon_0, lon_1, lon_2, lon_3, ... , lon_last],  # This entire array is c[0]
+    #     [lat_0, lat_1, lat_2, lat_3, ... , lat_last]   # This entire array is c[1]
+    #     )
+    c = hp.pixelfunc.pix2ang(nside, range(npix), nest=True, lonlat=True) # 呢個係 centre of the pixel
     sc = SkyCoord(ra=c[0], dec=c[1], unit=u.deg, frame='icrs', \
                   representation_type='unitspherical', obstime=t)
     gc = sc.transform_to(GCRS)

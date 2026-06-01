@@ -20,8 +20,8 @@ class Node:
     At the end call super().__init__(**kwargs) to continue initialization.
     """
     self.name = name     # name of the Node
-    self.observers = []  # observers of this Node
-    self.watch_list = [] # nodes this Node is observing
+    self.observers = []  # observers of this Node (Below this node, run 完 this need notify who?)
+    self.watch_list = [] # nodes this Node is observing (Above this node, receive data from who?)
     self.last_data = {}  # data after last update
     self.last_source = None # source of last update
 
@@ -35,15 +35,15 @@ class Node:
     for n in self.watch_list:
       n.detach(self)
 
-  def attach(self, observer):
+  def attach(self, observer): #Downstream 有邊個呀
     """
     Register observer (of type Node).
     The observer's notify() is called when this Node is done processing.
     The watch list is only to keep track of inputs.
     """
     if observer not in self.observers:
-      self.observers.append(observer)
-      observer.watch_list.append(self)
+      self.observers.append(observer) #A (self) knows that he needs to notify B (observer) later.
+      observer.watch_list.append(self) #B knows that he is watching A too.
 
   def detach(self, observer):
     """

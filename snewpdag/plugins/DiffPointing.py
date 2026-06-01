@@ -4,7 +4,7 @@ DiffPointing: generate a skymap of SN direction chi2's
 
 Arguments:
   detector_location: filename of detector database for DetectorDB
-  nside: healpix nside parameter, i.e., skymap resolution
+  nside: healpix nside parameter, i.e., skymap resolution (要試幾多個唔同嘅 direction)
   min_dts: minimum number of time differences in order to do calculation
   dt_field_name: default time difference field, default 'dt'
 
@@ -27,6 +27,29 @@ Output payload:
   ndof: 2
   map_zeroes: indices of bins with 0 value (min chi2)
 """
+
+"""
+ChatGPT Understanding Order:
+1. alert()
+2. cache_values()
+3. average_time()
+4. d_vectors()
+5. weight_matrix()
+6. reevaluate()
+7. reset()/revoke()
+"""
+
+"""
+Logic: 
+Given:
+    detector positions
+    detector timing uncertainties
+    measured arrival-time differences
+
+Find:
+    which sky directions best explain those time differences
+"""
+
 import sys
 import logging
 import numpy as np
@@ -36,8 +59,8 @@ from snewpdag.dag import Node, Detector, DetectorDB, CelestialPixels
 from astropy import units as u
 from astropy.time import Time
 
-class DiffPointing(Node):
-  def __init__(self, detector_location, nside, min_dts, **kwargs):
+class DiffPointing(Node): #Node is DiffPointing 嘅 parent class!
+  def __init__(self, detector_location, nside, min_dts, **kwargs): #**kwargs are just optional extra inputs, which will be saved in a dictionary
     self.db = DetectorDB(detector_location)
     self.nside = nside
     self.npix = hp.nside2npix(nside)
@@ -46,19 +69,29 @@ class DiffPointing(Node):
     self.cache = {} # (det1, det2): dt, t1, t2, bias, var, dsig1, dsig2
     super().__init__(**kwargs)
 
+# What cache_values does: 
+# It takes raw timing data for one detector pair, checks that dt, t1, and t2 exist, 
+# fills in missing bias/variance/covariance-related values from the detector database, 
+# and returns a CLEAN DICTIONARY ready to store in self.cache.
   def cache_values(self, k1, k2, dts):
-    d1 = self.db.get(k1)
+    d1 = self.db.get(k1) #k1 k2 其實都係 detector name lol
     d2 = self.db.get(k2)
-    if self.dt_field_name in dts and 't1' in dts and 't2' in dts:
+    if self.dt_field_name in dts and 't1' in dts and 't2' in dts: # dt, t1 and t2 these 3 data are MUSTTTTTT!!!
       dt = dts[self.dt_field_name] # s (default 'dt'; 'delta' is uncorrected)
-      t1 = dts['t1'] # s
+      t1 = dts['t1'] # s 
       t2 = dts['t2'] # s
+      # The reason why we need to also store t1 and t2 is because the Earth rotates! 
+      # We need to consider the relative motion! The relative sky location moves!
+      # The position of the detector relative to the celestial coordiantes changes over time!
     else:
       return None
+    # 如果 dts 冇包埋呢啲嘢 咁我地就要抄返 DetectorDB 裏面嘅數值
     bias = dts['bias'] if 'bias' in dts else d1.bias - d2.bias # sec
     var = dts['var'] if 'var' in dts else d1.sigma**2 + d2.sigma**2 # sec**2
     dsig1 = dts['dsig1'] if 'dsig1' in dts else d1.sigma # sec
-    dsig2 = dts['dsig2'] if 'dsig2' in dts else - d2.sigma # sec
+    dsig2 = dts['dsig2'] if 'dsig2' in dts else - d2.sigma # sec # 要負！！！！
+
+    # Saves every important data + properties of this detector pair:
     nrow = {
              'dt': dt,
              't1': t1,
@@ -68,7 +101,7 @@ class DiffPointing(Node):
              'dsig1': dsig1,
              'dsig2': dsig2,
            }
-    logging.info('cache ({}, {}): {}'.format(k1, k2, nrow))
+    logging.info('cache ({}, {}): {}'.format(k1, k2, nrow)) # Adding these new data into our cache!
     return nrow
 
   def average_time(self):
@@ -78,8 +111,8 @@ class DiffPointing(Node):
     To turn it into an astropy.Time object,
     Time(average_time(), format='unix')
     """
-    dets = set()
-    ts = []
+    dets = set() # Does not allow duplicates!!!!! 淨係可以用一次
+    ts = [] # 儲存啲 first burst from all detectors 
     for k in self.cache.keys():
       row = self.cache[k]
       if k[0] not in dets:
@@ -102,24 +135,25 @@ class DiffPointing(Node):
     """
     rc = 1.0 / 3.0e8 # 1/(m/s)
     nkeys = len(keys) # number of detector pairs
-    ddt = np.zeros(nkeys)
-    p1 = np.zeros([nkeys,3])
-    p2 = np.zeros([nkeys,3])
+    ddt = np.zeros(nkeys)     
+    p1 = np.zeros([nkeys,3]) #position vector of the first detector
+    p2 = np.zeros([nkeys,3]) #position vector of the second detector
     i = 0
     for k in keys:
       det1 = self.db.get(k[0])
       det2 = self.db.get(k[1])
-      dts = self.cache[k]
-      ddt[i] = dts['dt'] - dts['bias']
+      dts = self.cache[k] # dts 就係嗰個超級 useful summary {(det1, det2): nrow}
+      ddt[i] = dts['dt'] - dts['bias'] # Paper 入面嘅 Z_{AB} (estimated time difference)
+      #get_xyz 呢個 method 係喺 Detector.py 入面！！！！
       p1[i] = det1.get_xyz(Time(dts['t1'], format='unix')) # m
       p2[i] = det2.get_xyz(Time(dts['t2'], format='unix'))
       i += 1
-    dp = (p1 - p2) * rc # s, shape [nkeys,3]
-    d = np.transpose(dp @ directions) # [nv,nkeys]
-    d = d + ddt # broadcast adding ddt to each column
+    dp = (p1 - p2) * rc # s, shape [nkeys,3] # 佢同 ddt 係掉轉方向的！！！
+    d = np.transpose(dp @ directions) # [nv,nkeys] # @ 係 matrix multiplication 
+    d = d + ddt # broadcast adding ddt to each column # 所以而家 d 就儲存緊啲 residual vectors lol
     logging.info('ddt = {}'.format(ddt))
     logging.info('dp = {}'.format(dp))
-    return d
+    return d # 每個 row corresponds to 每個唔同嘅 hypotheses direction 每個 column corresponds to 唔同嘅 detector pairs
 
   def weight_matrix(self, keys):
     """
@@ -129,7 +163,7 @@ class DiffPointing(Node):
     Returns matrix as np.array, columns/rows ordered as in keys.
     """
     dim = len(self.cache)
-    v = np.zeros([dim, dim])
+    v = np.zeros([dim, dim]) # convariance matrix is a symmetric matrix
     i = 0
     for k1 in keys:
       d1 = self.cache[k1]
@@ -137,7 +171,7 @@ class DiffPointing(Node):
       for k2 in keys:
         d2 = self.cache[k2]
         if i == j:
-          v[i,j] = d2['var']
+          v[i,j] = d2['var'] #diagonal entries 就直接係 variance！
         else:
           if k1[0] == k2[0]:
             v[i,j] = d1['dsig1'] * d2['dsig1']
@@ -152,7 +186,7 @@ class DiffPointing(Node):
     # then invert the matrix
     logging.info('covariance matrix = {}'.format(v))
     try:
-      res = np.linalg.inv(v)
+      res = np.linalg.inv(v) #如果有inverse就當然計咗佢！！！
     except:
       logging.error('{}:  exception {}'.format(self.name, sys.exc_info()))
       logging.error('{}:  dim = {}'.format(self.name, dim))
@@ -164,13 +198,14 @@ class DiffPointing(Node):
         logging.error('{}:    var = {}, dsig1 = {}, dsig2 = {}'.format(self.name, d['var'], d['dsig1'], d['dsig2']))
       res = 0
     return res
-
+  
+  # CENTRAL METHOD:
   def reevaluate(self, data):
     """
     Reevaluate direction based on available time differences
     """
     keys = self.cache.keys() # keep list to preserve order
-    w = self.weight_matrix(keys) # shape [nkeys,nkeys]
+    w = self.weight_matrix(keys) # shape [nkeys,nkeys] # remember the key is the detector pair
 
     # Get the average time of the observing detectors.
     # Use this for time for transforming ICRS into GCRS
@@ -191,14 +226,14 @@ class DiffPointing(Node):
     ## xyz is an array of (x,y,z) unit vectors
     #rs = np.stack( (xyz.x, xyz.y, xyz.z) ) # shape (3,npix)
     cp = CelestialPixels()
-    rs = cp.get_map(self.nside, t0)
+    rs = cp.get_map(self.nside, t0) # rs = list of all possible supernova directions
 
     # the following was used when we assumed skymap was in GCRS
     #rs = hp.pixelfunc.pix2vec(self.nside, range(self.npix), nest=True)
     # rs will be an np.array of x,y,z values, each triple a unit vector.
     # however, it'll be returned in shape (3,npix)
     d = self.d_vectors(keys, rs) # returns shape (npix,nkeys)
-    dw = d @ w # returns shape (npix,nkeys)
+    dw = d @ w # returns shape (npix,nkeys) # this is just residual^T V^-1 in the paper
     m = np.zeros(self.npix)
     for i in range(self.npix):
       m[i] = np.dot(dw[i], d[i])
@@ -209,10 +244,11 @@ class DiffPointing(Node):
     data['ndof'] = 2
     data['map_zeroes'] = np.flatnonzero(m == 0.0)
     return data
-
+  
+  # we are replacing the older estimate of time difference by the newest / best one 
   def alert(self, data):
     if 'dts' in data: # dictionary of time differences
-      for k in data['dts']:
+      for k in data['dts']: # k is a detector pair
         # verify that the detector is in the database
         if self.db.has(k[0]) and self.db.has(k[1]):
           # check if it's already in the cache. If so, delete it.
@@ -239,7 +275,7 @@ class DiffPointing(Node):
         if self.db.has(k[0]) and self.db.has(k[1]):
           # check if it's already in the cache. If so, delete it.
           if k in self.cache:
-            self.cache.pop(k)
+            self.cache.pop(k) 
           else:
             krev = (k[1], k[0]) # reverse order
             if krev in self.cache:
