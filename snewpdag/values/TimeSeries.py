@@ -48,6 +48,7 @@ class TimeSeries:
     """
     Make a histogram out of the time series.
     """
+    # h is the histogram itself ; edges are the bin boundaries of the histogram
     t0 = self.start if start == None else start
     t1 = self.stop if stop == None else stop
     #logging.debug('histogram: nbins = {}, t0 = {}, t1 = {}, times = {}'.format(nbins, t0, t1, self.times))

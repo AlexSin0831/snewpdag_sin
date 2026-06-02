@@ -11,6 +11,9 @@ Arguments:
       sigma_diff = expected uncertainty on diff
   true_lag = true lag value (optional)
 """
+"""
+Section II B in the paper
+"""
 import logging
 import numpy as np
 
@@ -19,10 +22,13 @@ from snewpdag.dag.lib import fetch_field, store_field
 
 class FirstEventDiff(Node):
   def __init__(self, in_series1_field, in_series2_field, out_field, **kwargs):
-    self.in_series1_field = in_series1_field
+    # keys to get the real time series data from the payload
+    self.in_series1_field = in_series1_field  
     self.in_series2_field = in_series2_field
     self.out_field = out_field
     self.true_lag = kwargs.pop('true_lag', 0.0)
+    # true_t1 and true_t2 are not things you would know for real supernova data. 
+    # They are only available in simulations / Monte Carlo studies, where the generator knows the “truth.”
     self.true_t1 = kwargs.pop('true_t1', 0.0)
     self.true_t2 = kwargs.pop('true_t2', 0.0)
     self.out_key = kwargs.pop('out_key', ('D1','D2')) # usually names the detectors
@@ -36,39 +42,49 @@ class FirstEventDiff(Node):
     tsr2, valid = fetch_field(data, self.in_series2_field) # TimeSeries
     if not valid:
       return False
-
+    
+    # default to be zeroes, i.e. useless / negligible 
     true_t1 = 0.0
     true_t2 = 0.0
     if self.true_t1 != 0.0:
       true_t1, valid = fetch_field(data, self.true_t1)
     if self.true_t2 != 0.0:
       true_t2, valid = fetch_field(data, self.true_t2)
-    true_dt12 = true_t1 - true_t2
+    true_dt12 = true_t1 - true_t2 # probably 0 in the true experiments
 
     # difference between first times
-    tf1 = np.min(tsr1.times)
+    # because tsr1 and tsr2 are objects from TimeSeries, when we .times, we can get the whole array out!!!
+    tf1 = np.min(tsr1.times) 
     tf2 = np.min(tsr2.times)
-    dtf = tf1 - tf2
+    dtf = tf1 - tf2 # this is the most raw first data - first data 
 
     logging.info('{}: t1 = {}, true = {}, relative = {}'.format(self.name, tf1, true_t1, tf1 - true_t1))
     logging.info('{}: t2 = {}, true = {}, relative = {}'.format(self.name, tf2, true_t2, tf2 - true_t2))
 
     # subtract off one of the first times
-    base = tf1 if tf1 < tf2 else tf2
-    ts1 = tsr1.times - base
+    base = tf1 if tf1 < tf2 else tf2 # choose the smallest 
+    # every element in the time series is subtracted by the base
+    ts1 = tsr1.times - base 
     ts2 = tsr2.times - base
     #tf1 = tf1 - base
     #tf2 = tf2 - base
 
     # expected value of delta
     # note that aside from alpha, this only depends on first series
-    alpha = len(ts2) / len(ts1)
-    s1 = np.sort(ts1)
+    # in the paper, alpha should be smaller than 1, i.e. the second detector should be smaller than the first one
+    # intuition on len(ts1) and len(ts2): how many detections your detector can detect? 
+    # if det1 is larger than det2, then det1 should detect more ==> len(ts1) > len(ts2)
+    alpha = len(ts2) / len(ts1) 
+    # ensure the 2 time series are in ascending order 
+    s1 = np.sort(ts1) 
     s2 = np.sort(ts2)
+    # [1.0, 2.0 ,..., len(s1)]
     ik1 = np.arange(1.0, len(s1) + 1.0)
+    # [exp(-1.0), exp(-2.0) ,..., exp(-len(s1))]
     e1 = np.exp(-ik1)
+    # Equation (4) in the paper!!!!!
     et1 = np.sum(e1 * s1) / np.sum(e1) # exp val of t1
-    et1sq = np.sum(e1 * s1 * s1) / np.sum(e1)
+    et1sq = np.sum(e1 * s1 * s1) / np.sum(e1) # exp val of t1^2
     e1a = np.exp(-alpha*ik1)
     et1a = np.sum(e1a * s1) / np.sum(e1a) # exp val of t1 with different yield
     et1asq = np.sum(e1a * s1 * s1) / np.sum(e1a)
@@ -81,20 +97,25 @@ class FirstEventDiff(Node):
     dte = et1 - et1a # bias due to alpha (different yields)
 
     # deviation (diff - expected diff)
+    # dtf is the very raw first event of det1 - first event of det2
+    # dte is the bias due to the detector size
     dev = dtf - dte
     logging.debug('{}: dtf = {}, dte = {}, dev = {}'.format(self.name, dtf, dte, dev))
 
     # uncertainty estimate
-    #sigma2 = et1sq + et2sq - et1*et1 - et2*et2
+    #sigma2 = et1sq + et2sq - et1*et1 - et2*et2 (Equation (7) in the Paper!!!!)
     var1 = et1sq - et1*et1
     var2 = et2sq - et2*et2
     var1a = et1asq - et1a*et1a
     # choose the larger variance between 2 and 1a
+    # we are very conservative lmao
+    # just consider the worst case scenario!
     if var1a > var2:
       sigma2 = var1 + var1a
       var2 = var1a
     else:
       sigma2 = var1 + var2
+    # Root-mean-square
     rms = np.sqrt(sigma2)
     rms_fudge = rms * self.sigma_fudge
     #logging.debug('{}: et1sq = {}, et2sq = {}, et1 = {}, et2 = {}'.format(self.name, et1sq, et2sq, et1, et2))
@@ -102,7 +123,7 @@ class FirstEventDiff(Node):
     logging.debug('{}: et1 = {}, et2 = {}, et1a = {}'.format(self.name, et1, et2, et1a))
 
     # pull (either self.true_lag or true_dt12 could be zero if not set before)
-    dt_true = dev - self.true_lag - true_dt12
+    dt_true = dev - self.true_lag - true_dt12 
     pull = dt_true / rms
     pull_fudge = dt_true / rms_fudge
 
@@ -117,6 +138,7 @@ class FirstEventDiff(Node):
       dts = d.copy() # shallow copy of the dts dictionary so we can add to it
     else:
       dts = {}
+    # (Det1,Det2)
     dts[self.out_key] = {
                           'delta': dtf, # not needed by DiffPointing
                           'exp_delta': dte, # not needed by DiffPointing

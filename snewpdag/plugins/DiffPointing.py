@@ -42,14 +42,25 @@ ChatGPT Understanding Order:
 """
 Logic: 
 Given:
-    detector positions
-    detector timing uncertainties
-    measured arrival-time differences
+    detector positions (原廠設定)
+    detector timing uncertainties (原廠設定)
+    measured arrival-time differences (上一手資料)
 
 Find:
     which sky directions best explain those time differences
 """
 
+"""
+DiffTimes outputs data['dts']
+        ↓
+DiffPointing.alert(data) receives the payload
+        ↓
+DiffPointing reads data['dts']
+        ↓
+DiffPointing stores it in self.cache
+        ↓
+DiffPointing uses self.cache to calculate the sky map
+"""
 import sys
 import logging
 import numpy as np
@@ -65,8 +76,8 @@ class DiffPointing(Node): #Node is DiffPointing 嘅 parent class!
     self.nside = nside
     self.npix = hp.nside2npix(nside)
     self.min_dts = min_dts
-    self.dt_field_name = kwargs.pop('dt_field_name', 'dt')
-    self.cache = {} # (det1, det2): dt, t1, t2, bias, var, dsig1, dsig2
+    self.dt_field_name = kwargs.pop('dt_field_name', 'dt') # 如果我地有俾 dt_field_name 佢 佢就會用我哋嗰個 otherwise 佢就用 default dt
+    self.cache = {} # {(det1, det2): {'dt': ,'t1': ,'t2': ,'bias': ,'var': ,'dsig1': ,'dsig2':}} # double dictionary!
     super().__init__(**kwargs)
 
 # What cache_values does: 
@@ -162,25 +173,25 @@ class DiffPointing(Node): #Node is DiffPointing 嘅 parent class!
       keys = ordered list of keys of (det1, det2).
     Returns matrix as np.array, columns/rows ordered as in keys.
     """
-    dim = len(self.cache)
-    v = np.zeros([dim, dim]) # convariance matrix is a symmetric matrix
+    dim = len(self.cache) # how many pairs? 
+    v = np.zeros([dim, dim]) # 一開始已經預設晒係 0 ==> 冇重疊當然 covariance = 0！
     i = 0
-    for k1 in keys:
-      d1 = self.cache[k1]
+    for k1 in keys: #Be careful, k1 係 detector pairs
+      d1 = self.cache[k1] # d1 係成個 dictionary corresponding to this detector pair
       j = 0
       for k2 in keys:
         d2 = self.cache[k2]
         if i == j:
-          v[i,j] = d2['var'] #diagonal entries 就直接係 variance！
+          v[i,j] = d2['var'] #diagonal entries 就直接係 variance！ 求其揀一pair都得 因為根本一樣 lmao
         else:
           if k1[0] == k2[0]:
-            v[i,j] = d1['dsig1'] * d2['dsig1']
+            v[i,j] = d1['dsig1'] * d2['dsig1'] # positive # dsig1 = + standard deviation ; dsig2 = - standard deviation !!!
           elif k1[1] == k2[1]:
-            v[i,j] = d1['dsig2'] * d2['dsig2']
+            v[i,j] = d1['dsig2'] * d2['dsig2'] # positive 
           elif k1[0] == k2[1]:
-            v[i,j] = d1['dsig1'] * d2['dsig2']
+            v[i,j] = d1['dsig1'] * d2['dsig2'] # negative 
           elif k1[1] == k2[0]:
-            v[i,j] = d1['dsig2'] * d2['dsig1']
+            v[i,j] = d1['dsig2'] * d2['dsig1'] # negative
         j += 1
       i += 1
     # then invert the matrix
@@ -246,6 +257,9 @@ class DiffPointing(Node): #Node is DiffPointing 嘅 parent class!
     return data
   
   # we are replacing the older estimate of time difference by the newest / best one 
+  # 真正在餵 data 俾呢個 programme 嘅部份 並且 check 埋呢啲 data 係咪真係啱用
+  # treat it as the main() function of normal programmes
+  # 進場點!!! 上一手嘅 data 首先就會走入去呢個 method 跟住呢個 method 就會 call 其他喺呢個 class 嘅 function 嚟計數
   def alert(self, data):
     if 'dts' in data: # dictionary of time differences
       for k in data['dts']: # k is a detector pair
@@ -264,9 +278,9 @@ class DiffPointing(Node): #Node is DiffPointing 嘅 parent class!
             self.cache[k] = nrow
 
     if len(self.cache) >= self.min_dts:
-      return self.reevaluate(data)
+      return self.reevaluate(data) # then the payload will become this 
     else:
-      return False
+      return False # then the graph will stop here
 
   def revoke(self, data):
     if 'dts' in data:

@@ -43,24 +43,28 @@ class FirstEventDebias(Node):
     super().__init__(**kwargs)
 
   def alert(self, data):
-    ts, valid = fetch_field(data, self.in_field)
+    ts, valid = fetch_field(data, self.in_field) # ts is a TimeSeries object
     if not valid:
       return False
 
     # determine background level
-    stop = ts.start + 5.0
-    h, edges = ts.histogram(50000, stop=stop)
+    stop = ts.start + 5.0 # 5 seconds is long enough compared with the first-event!
+    # format for histogram from TimeSeries.py: (self, nbins, start=None, stop=None) 
+    h, edges = ts.histogram(50000, stop=stop) # cutting the 5-second time series into 50000 pieces ==> 1 bin = 0.0001s = 0.1ms
     bg_rate = np.sum(h[:10000]) / 10000 # background events / 0.1ms
     hs = h - bg_rate
     logging.debug('{}: h = {}'.format(self.name, h[:10]))
 
     # first event:  find peak, work back to bin before sub-bg level
-    ifirst = np.argmax(hs)
+    # Whole paragraph's main goals: 
+    # 1. Subtract the background noise 
+    # 2. Remove those negative values ==> Only useful data left
+    ifirst = np.argmax(hs) # ifirst is a bin of the histogram!
     logging.debug('{}: argmax = {}, hs = {}, h = {}, bg_rate = {}, t = {}'.format(self.name, ifirst, hs[ifirst], h[ifirst], bg_rate, edges[ifirst]))
     ilast = ifirst
     while hs[ifirst] > 0.0:
       ifirst = ifirst - 1
-    ifirst = ifirst + 1 # point to a bin above 0
+    ifirst = ifirst + 1 # point (bin actually) to a bin above 0 
     t0 = edges[ifirst]
     while ilast < len(hs):
       if hs[ilast] <= 0.0:
@@ -69,14 +73,17 @@ class FirstEventDebias(Node):
     logging.debug('{}: ifirst = {}, ilast = {}'.format(self.name, ifirst, ilast))
 
     # calculate bias correction based on background-subtracted histogram
-    #n = np.maximum(hs[ifirst:ilast], 0.0)
-    n = hs[ifirst:ilast] # all should be positive
+    # n = np.maximum(hs[ifirst:ilast], 0.0)
+    # Equation (9) in the Paper!!!
+    n = hs[ifirst:ilast] # all should be positive # n = n_r - b_r in the paper!!!
     t = edges[ifirst:ilast]
-    sn = np.cumsum(n)
+    # n = [1, 2, 3, 4, 5]
+    # np.cumsum(n) = [1, 3, 6, 10, 15]
+    sn = np.cumsum(n) # \mu_k in the paper!!!!
     ex = np.exp(-sn)
     num = n[0] * t[0] + np.sum(n[1:] * t[1:] * ex[:-1])
     denom = n[0] + np.sum(n[1:] * ex[:-1])
-    corr = num / denom
+    corr = num / denom 
     t1 = t0 - corr
 
     logging.debug('{}: t0 = {}, corr = {}, after = {}'.format(self.name, t0, corr, t1))

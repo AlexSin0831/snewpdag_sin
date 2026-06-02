@@ -12,7 +12,8 @@ import logging
 import numpy as np
 
 from snewpdag.dag import Node
-from snewpdag.dag.lib import fetch_field, store_field
+from snewpdag.dag.lib import fetch_field, store_field 
+# Interesting that we can call a small function inside a small file inside the same package hahahaha
 
 class FirstEventTime(Node):
   def __init__(self, in_field, in_truth_field,
