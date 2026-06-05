@@ -37,7 +37,7 @@ class DetectorDB:
 
   def get(self, name): #used in DiffTimes.py
     if self.has(name):
-      return DetectorDB.dets[name]
+      return DetectorDB.dets[name] # this returns an object from Detector.py
     else:
       return None
 
