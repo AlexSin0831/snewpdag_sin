@@ -29,7 +29,7 @@ class FirstEventDiff(Node):
     self.true_lag = kwargs.pop('true_lag', 0.0)
     # true_t1 and true_t2 are not things you would know for real supernova data. 
     # They are only available in simulations / Monte Carlo studies, where the generator knows the “truth.”
-    self.true_t1 = kwargs.pop('true_t1', 0.0)
+    self.true_t1 = kwargs.pop('true_t1', 0.0) # also fields 
     self.true_t2 = kwargs.pop('true_t2', 0.0)
     self.out_key = kwargs.pop('out_key', ('D1','D2')) # usually names the detectors
     self.sigma_fudge = kwargs.pop('sigma_fudge', 1.0) # scale up sigma
@@ -50,7 +50,7 @@ class FirstEventDiff(Node):
       true_t1, valid = fetch_field(data, self.true_t1)
     if self.true_t2 != 0.0:
       true_t2, valid = fetch_field(data, self.true_t2)
-    true_dt12 = true_t1 - true_t2 # probably 0 in the true experiments
+    true_dt12 = true_t1 - true_t2 
 
     # difference between first times
     # because tsr1 and tsr2 are objects from TimeSeries, when we .times, we can get the whole array out!!!

@@ -39,7 +39,7 @@ import numpy as np
 
 from snewpdag.dag import Node
 
-class TimeDistSource(Node):
+class TimeDistSource(Node): # Here is node!
 
   def __init__(self, sig_filename, sig_filetype, **kwargs):
     dels = kwargs.pop('sig_delimiter', '')

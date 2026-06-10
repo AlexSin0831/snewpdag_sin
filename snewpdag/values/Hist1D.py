@@ -9,7 +9,7 @@ class Hist1D:
     self.nbins = nbins
     self.xlow = xlow
     self.xhigh = xhigh
-    self.xwidth = xhigh - xlow
+    self.xwidth = xhigh - xlow # remember xwidth is the whole range of the histogram
     self.clear()
 
   def clear(self):
@@ -24,8 +24,8 @@ class Hist1D:
   def copy(self):
     h = Hist1D(self.nbins, self.xlow, self.xhigh)
     h.bins = self.bins.copy()
-    h.overflow = self.overflow
-    h.underflow = self.underflow
+    h.overflow = self.overflow # counts with x larger than xhigh
+    h.underflow = self.underflow # counts with x smaller than xlow 
     h.sum = self.sum
     h.sum2 = self.sum2
     h.sum3 = self.sum3
@@ -61,7 +61,7 @@ class Hist1D:
     and overflow is a number >= nbins
     """
     try:
-      return np.int(self.nbins * (x - self.xlow) / self.xwidth)
+      return np.int(self.nbins * (x - self.xlow) / self.xwidth) # self.nbins / self.xwidth is the bin-width
     except:
       logging.info('Hist1D.bin: index calc error {}'.format(sys.exc_info()))
       return None
@@ -70,7 +70,7 @@ class Hist1D:
     """
     Return low edge of bin
     """
-    dx = self.xwidth / len(self.bins)
+    dx = self.xwidth / len(self.bins) # bin-width
     return self.xlow + index * dx
 
   def fill(self, x, weight=1.0):

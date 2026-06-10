@@ -31,6 +31,27 @@ Originally based on Vladimir's TimeDistFileInput, via TimeDist
 
 Need a generator for SN direction and core bounce times for each detector.
 """
+"""
+Given the true detector arrival time and a theoretical light curve,
+we generate a fake observed neutrino event time series for one detector
+Take a model lightcurve shape
+        ↓
+randomly generate neutrino event times following that shape
+        ↓
+shift those times to the detectors true arrival time
+        ↓
+add them into a TimeSeries object in the payload
+"""
+"""
+NewTimeSeries
+  creates empty TimeSeries object
+        ↓
+GenTimeDist
+  fetches that TimeSeries object
+  generates event times
+  adds them into it
+  """
+
 import logging
 import numpy as np
 import numbers
@@ -40,7 +61,7 @@ from snewpdag.dag.lib import fetch_field
 from snewpdag.values import Hist1D, TimeSeries
 from . import TimeDistSource
 
-class GenTimeDist(TimeDistSource):
+class GenTimeDist(TimeDistSource): # OMG it is not node!!!! 
 
   one_series = () # shared time series, if self.sig_once is True
   one_mean = 0 # intended mean of shared time series
@@ -52,37 +73,48 @@ class GenTimeDist(TimeDistSource):
       self.sig_t0 = ts
     elif isinstance(ts, numbers.Number): # literal
       self.sig_t0 = ts
+    # pop() 嘅好處係： 佢read完就會delete個 kwargs 
+    # 咁樣做可以確保 parent node 嘅 argument 係佢自己睇得明嘅東西
     self.sig_mean = kwargs.pop('sig_mean', 0.0)
     self.sig_distance = kwargs.pop('sig_distance', 10.0)
     self.sig_smear = kwargs.pop('sig_smear', True)
-    self.sig_once = kwargs.pop('sig_once', False)
+    self.sig_once = kwargs.pop('sig_once', False) # 呢個係on9 的
     self.epoch_base = kwargs.pop('epoch_base', 0.0)
 
     if not isinstance(self.epoch_base, (numbers.Number, str, list, tuple)):
       logging.error('GenTimeDist.__init__: unrecognized epoch_base {}. Set to 0.'.format(self.epoch_base))
       self.epoch_base = 0.0
 
+    # TimeDistSource.py 要read filename 同 filetype 所以其實 we must provide it...
+    # Otherwise self.mu will be undefined...
     super().__init__(**kwargs)
-    self.area = np.sum(self.mu)
-    self.mu_norm = self.mu / self.area
-    self.tedges = np.append(self.t, self.thi) # append high end to t array
+    # self.mu is from TimeDistSource.py 
+    # and you can understand it as the y-value of the histogram (theoretical intensity of a lightcurve)
+    self.area = np.sum(self.mu) 
+    self.mu_norm = self.mu / self.area # become probability density 
+    self.tedges = np.append(self.t, self.thi) # append high end to t array # self.t = lower edge and self.thi = final upper edge 
 
     # if sig_mean is 0 or an empty string, set it to self.area
     if self.sig_mean == 0 or self.sig_mean == "":
-      self.sig_mean = self.area
+      self.sig_mean = self.area 
       logging.info('{}:  mean set to area {}'.format(self.name, self.area))
 
     # pre-generate single series
     if self.sig_once and np.shape(GenTimeDist.one_series) == (0,):
+      # choice is picking the indices of an array according to the probability distribution 
+      # self.sig_mean ==> 抽幾多粒數
+      # replace = True ==> 可以重複
       j = Node.rng.choice(len(self.mu_norm), self.sig_mean,
-                          p=self.mu_norm, replace=True, shuffle=False)
+                          p=self.mu_norm, replace=True, shuffle=False) # j is an array 
       ta = self.tedges[j]
       dt = self.tedges[j+1] - ta
       GenTimeDist.one_series = ta + Node.rng.random(self.sig_mean) * dt
       GenTimeDist.one_mean = self.sig_mean
 
   def alert(self, data):
+    # v can be interpreted as some empty time series created by ops.NewTimeSeries.py 
     v, flag = fetch_field(data, self.field)
+
     if flag:
 
       # epoch base
@@ -92,15 +124,15 @@ class GenTimeDist(TimeDistSource):
         te = fetch_field(data, self.epoch_base)
 
       # adjust offsets for t0 and TimeSeries reference timestamps.
-      # For instance, if core bounce is at 100s, but ref time is 90s,
+      # For instance, if core bounce is at 100s, but ref time is 90s, (ref time means epoch_base)
       # then an event at t=0 should have an offset of 10s.
       if isinstance(self.sig_t0, (str, tuple, list)): # interpret as field
-        t0, flag = fetch_field(data, self.sig_t0) # s in unix epoch
+        t0, flag = fetch_field(data, self.sig_t0) # s in unix epoch # 如果係文字就要 fetch 返個數字出嚟
         if not flag:
           logging.error('{}: {} not found in payload'.format(self.name, self.sig_t0))
           return False
       else:
-        t0 = self.sig_t0
+        t0 = self.sig_t0 # 如果係數字就直接係咁
 
       offset = t0 - te
       logging.debug('{}: t0 = {}, ref time {}, offset {}'.format(self.name, t0, te, offset))

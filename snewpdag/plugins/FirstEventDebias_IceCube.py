@@ -15,7 +15,7 @@ class FirstEventIceCube (Node):
     def __init__(self, in_start_time_field, in_hist_field, in_truth_field, out_field, out_delta_field, **kwargs):
         self.in_start_time_field = in_start_time_field
         self.in_hist_field = in_hist_field
-        self.in_truth_field = in_truth_field
+        self.in_truth_field = in_truth_field # only stores the "idealistic" arrival time of neutrinos
         self.out_field = out_field 
         self.out_delta_field = out_delta_field
         super().__init__(**kwargs)
@@ -58,9 +58,9 @@ class FirstEventIceCube (Node):
         numerator = region_of_interest[0] * time_stamps[0] + np.sum(region_of_interest[1:] * time_stamps[1:] * exp[:-1])
         denominator = region_of_interest[0] + np.sum(region_of_interest[1:] * exp[:-1])
 
-        expected_value = numerator / denominator # Equation (9) in the Paper
+        bias = numerator / denominator # Equation (9) in the Paper
         
-        correct_start_time = start_time - expected_value
+        correct_start_time = start_time - bias
 
         store_field(data, self.out_field, correct_start_time)
         
