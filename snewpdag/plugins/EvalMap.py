@@ -37,7 +37,7 @@ class EvalMap(Node):
     the Hist1D or TimeSeries reference time.
     Return unix timestamp.
     """
-    ts = [ self.cache[k].reference[0] for k in self.cache.keys() ]
+    ts = [ self.cache[k].reference[0] for k in self.cache.keys() ] # CodeX says Hist1D has no reference ?????
     return np.min(ts)
 
   def compare(self, keys, tdelay):
@@ -59,7 +59,7 @@ class EvalMap(Node):
       if isinstance(v, Hist1D):
         bin_width = v.xwidth / v.nbins # seconds
         if bin_width > max_width:
-          max_width = bin_width
+          max_width = bin_width # use the histogram with largest bin width, and set it as the standard!
           kc = k
 
     # choose binning
@@ -69,7 +69,7 @@ class EvalMap(Node):
       ref_duration = v.xwidth
       ref_start = v.xlow # TODO: not all TimeSeries have something like this.
       ref_reference = v.reference
-    else:
+    else: # max_width == 0.0 ==> didn't redefine max_width above ==> not Hist1D
       ref_nbins = 100
       ref_duration = 10.0 # should really choose shortest duration TimeSeries
       ref_start = v.start
@@ -83,7 +83,7 @@ class EvalMap(Node):
     bgrs = [] # per bin
     areas = []
     for k in keys:
-      v = self.cache[k]
+      v = self.cache[k] 
       # TODO: no reference field anymore.
       # also should use everything before burst time.
       t0 = subtract_time(v.reference, (1,0))
@@ -93,7 +93,7 @@ class EvalMap(Node):
       h = v.histogram(ref_nbins, tstart, tstart + ref_duration)
       sig = h - bg
       hs.append(h) # total counts, shape (nkeys,nbins)
-      sigs.append(sig) # shape (nkeys,nbins)
+      sigs.append(sig) # shape (nkeys,nbins) # why? I don't think nbins is the same among detectors 
       bgrs.append(bg)
       a = np.sum(sig) # signal area. Could be zero or negative.
       areas.append(a)
@@ -105,7 +105,7 @@ class EvalMap(Node):
 
     # evaluate reference signal profile
     sigsum = np.sum(ss, 0)
-    ref = sigsum / np.sum(sigsum)
+    ref = sigsum / np.sum(sigsum) 
     logging.debug('observed  = {}'.format(nn))
     logging.debug('signal    = {}'.format(ss))
     logging.debug('reference = {}'.format(sigsum))
@@ -117,7 +117,7 @@ class EvalMap(Node):
         if aa[i] > 0:
           pp = aa[i]*ref[j] + bb[i]
           if pp > 0:
-            x = nn[i,j] * np.log(pp) - pp - sc.gammaln(nn[i,j] + 1)
+            x = nn[i,j] * np.log(pp) - pp - sc.gammaln(nn[i,j] + 1) # Poisson log-likelihood 
             chi2 += x
             #logging.debug('  {},{}:  a={}, ref={}, b={}, n={} -> pp={} x={} chi2={}'.format(j,i,aa[i],ref[j],bb[i],nn[i,j],pp,x,chi2))
     chi2 *= -2.0
@@ -125,10 +125,10 @@ class EvalMap(Node):
 
   def reevaluate(self, data):
     # get directions to evaluate
-    t0 = self.reference_time()
-    t0a = Time(t0, format='unix')
+    t0 = self.reference_time() # an unix timestamp 
+    t0a = Time(t0, format='unix') # astropy object: more rich 
     cp = CelestialPixels()
-    rs = cp.get_map(self.nside, t0) # shape (3,npix)
+    rs = cp.get_map(self.nside, t0) # shape (3,npix)  
 
     # get nominal time shifts for each detector for each pixel
     keys = list(self.cache.keys()) # make a list to preserve order
@@ -141,6 +141,7 @@ class EvalMap(Node):
       i += 1
     tdet = pd @ rs / 3.0e8 # time offsets in s, rel to Earth center
     # shape of tdet should be (nkeys,npix)
+    # test all pixels for all detectors, calculate the relative time delay 
 
     # get reference signal profile for each pixel's hypothetical direction
     m = np.zeros(self.npix)

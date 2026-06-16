@@ -100,7 +100,7 @@ class GenTimeDist(TimeDistSource): # OMG it is not node!!!!
       logging.info('{}:  mean set to area {}'.format(self.name, self.area))
 
     # pre-generate single series
-    if self.sig_once and np.shape(GenTimeDist.one_series) == (0,):
+    if self.sig_once and np.shape(GenTimeDist.one_series) == (0,): # this means the shared set has not yet been generated
       # choice is picking the indices of an array according to the probability distribution 
       # self.sig_mean ==> 抽幾多粒數
       # replace = True ==> 可以重複
@@ -110,7 +110,11 @@ class GenTimeDist(TimeDistSource): # OMG it is not node!!!!
       dt = self.tedges[j+1] - ta
       GenTimeDist.one_series = ta + Node.rng.random(self.sig_mean) * dt
       GenTimeDist.one_mean = self.sig_mean
-
+    # 如果開咗 sig_once: 
+    # 咁 detA 可能度到： [100.002, 100.006, 100.011]
+    # det B 可能度到： [100.012, 100.016, 100.021]
+    # Note that the relative separation is the same, only the starting point has shifted 
+    # Remove the effect by random event generation ==> Only see how the time shift affect
   def alert(self, data):
     # v can be interpreted as some empty time series created by ops.NewTimeSeries.py 
     v, flag = fetch_field(data, self.field)

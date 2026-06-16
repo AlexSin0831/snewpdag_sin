@@ -34,20 +34,24 @@ class FirstEventIceCubeInterpolation (Node):
         if factor <= 0: 
             return False
         
+        # number of bins / intervals:
         new_nbins = hist.nbins * factor 
 
-        # bin_width
+        # bin_width:
         old_bin_width = hist.xwidth / hist.nbins
         new_bin_width = old_bin_width / factor 
 
         old_bin_counts = hist.bins.astype(float)
-        old_edges = np.linspace(hist.xlow, hist.xhigh, hist.nbins + 1)
+        old_edges = np.linspace(hist.xlow, hist.xhigh, hist.nbins + 1) # that's why we need +1 here
         old_centres = 0.5 * (old_edges[:-1] + old_edges[1:])
         old_rates = old_bin_counts / old_bin_width # per 2 ms
 
         new_edges = np.linspace(hist.xlow, hist.xhigh, new_nbins+ 1)
         new_centres = 0.5 * (new_edges[:-1] + new_edges[1:])
-        new_rates = np.interp(new_centres, old_centres, old_rates) # still per 2 ms
+        # interpolated detection rates (per 2 ms):
+        new_rates = np.interp(new_centres, # wanted x-values
+                              old_centres, # known x-values 
+                              old_rates) # known x-values
 
         # new_bin_width < old_bin_width ==> new_bin_counts < old_bin_counts 
         # resolution will become higher but detection per bin will become smaller
@@ -58,10 +62,14 @@ class FirstEventIceCubeInterpolation (Node):
         if new_bin_start <= 0:
             return False
         
-        # number of detections uptill the "given start time" / new time scale
-        bg_rate = np.sum(new_bin_counts[:new_bin_start])/new_bin_start # per smaller time
+        # calculate the background noise using the given start time 
+        # note that new_bin_start is larger than old_bin_start ==> bg_rate will drop 
+        # but this makes sense, cuz the bin-width becomes smaller, so the background contribution
+        # to each bin will get smaller
+        bg_rate = np.sum(new_bin_counts[:new_bin_start])/new_bin_start # per new time scale (smaller!)
         new_bin_counts_without_bg = new_bin_counts - bg_rate 
-
+        
+        # algorithm from FirstEventDebias
         i_first = np.argmax(new_bin_counts_without_bg)
         i_last = i_first 
         while new_bin_counts_without_bg[i_first] > 0 and i_first > 0: 
