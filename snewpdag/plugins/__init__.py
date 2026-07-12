@@ -64,6 +64,7 @@ from .PoissonLagLikelihood_v1 import PoissonLagLikelihood_v1
 from .PoissonLagLikelihood_v2 import PoissonLagLikelihood_v2
 from .PoissonLagLikelihood_v3 import PoissonLagLikelihood_v3
 from .PoissonLagLikelihood_v4 import PoissonLagLikelihood_v4
+from .PoissonLagLikelihood_v5 import PoissonLagLikelihood_v5
 from .LikelihoodScanCollector import LikelihoodScanCollector
 from .LikelihoodPeakRefiner import LikelihoodPeakRefiner
 
