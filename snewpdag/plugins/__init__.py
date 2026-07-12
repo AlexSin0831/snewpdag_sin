@@ -58,6 +58,14 @@ from .BiasTest import BiasTest
 from .FirstEventDebias import FirstEventDebias
 from .CoincSeries import CoincSeries
 from .FirstEventDiff import FirstEventDiff
+from .PairTimeSeriesToHist import PairTimeSeriesToHist
+from .TimeLagGenerator import TimeLagGenerator
+from .PoissonLagLikelihood_v1 import PoissonLagLikelihood_v1
+from .PoissonLagLikelihood_v2 import PoissonLagLikelihood_v2
+from .PoissonLagLikelihood_v3 import PoissonLagLikelihood_v3
+from .PoissonLagLikelihood_v4 import PoissonLagLikelihood_v4
+from .LikelihoodScanCollector import LikelihoodScanCollector
+from .LikelihoodPeakRefiner import LikelihoodPeakRefiner
 
 #from .DtsCalculator import DtsCalculator # needs to be updated
 from .DiffTimes import DiffTimes
@@ -71,4 +79,3 @@ from .NBLag import NBLag
 
 from .PickleInput import PickleInput
 from .JsonAlertInput import JsonAlertInput
-

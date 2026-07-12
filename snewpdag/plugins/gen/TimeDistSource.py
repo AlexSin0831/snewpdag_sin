@@ -113,7 +113,7 @@ class TimeDistSource(Node): # Here is node!
           logging.error('Unrecognized sig_t_low type')
           sys.exit(2)
       else:
-        logger.error('Missing histogram fields')
+        logging.error('Missing histogram fields')
         sys.exit(2)
     super().__init__(**kwargs)
 

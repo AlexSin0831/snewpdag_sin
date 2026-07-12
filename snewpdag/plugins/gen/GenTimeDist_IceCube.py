@@ -47,7 +47,7 @@ class GenTimeDist_IceCube (TimeDistSource):
         ts = kwargs.pop('sig_t0', 0.0)
         if isinstance(ts, (list, tuple, str)): # field specifier
             self.sig_t0 = ts
-        elif isinstance(ts, numbers.Number): # literal
+        elif isinstance(ts, numbers.Number): 
             self.sig_t0 = ts
         
         self.sig_mean = kwargs.pop('sig_mean', 0.0)
@@ -59,10 +59,11 @@ class GenTimeDist_IceCube (TimeDistSource):
             logging.error('GenTimeDist.__init__: unrecognized epoch_base {}. Set to 0.'.format(self.epoch_base))
             self.epoch_base = 0.0
 
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # sig_filename, sig_filetype
 
+        # we need to put super().__init__(**kwargs) above, otherwise self.mu & self.t & self.thi would be undefined. 
         self.area = np.sum(self.mu)
-        self.mu_norm = self.mu / self.area 
+        self.mu_norm = self.mu / self.area # kinda like a probability distribution
         self.tedges = np.append(self.t, self.thi) # model edges aren't necessarily same as the hist's edges
 
         if self.sig_mean == 0 or self.sig_mean == "": 
@@ -77,6 +78,7 @@ class GenTimeDist_IceCube (TimeDistSource):
             return False 
         
         if flag: 
+            # we ensured that self.epoch_base must be number/str/list/tuple in __init__
             if isinstance(self.epoch_base, numbers.Number): 
                 t_epoch = self.epoch_base 
             elif isinstance(self.epoch_base, (str, list, tuple)): 
@@ -99,7 +101,7 @@ class GenTimeDist_IceCube (TimeDistSource):
             else: 
                 expected_total_count, flag = fetch_field(data, self.sig_mean)
                 if not flag: 
-                    expected_total_count = self.area # use model's result 
+                    expected_total_count = self.area # use model's result ; still goes on first
                     logging.error('{}: sig_mean field {} not found'.format(self.name, self.sig_mean))
 
             if isinstance(self.sig_distance, numbers.Number): 
@@ -109,15 +111,19 @@ class GenTimeDist_IceCube (TimeDistSource):
                 if flag: 
                     f = 10.0 / d
                 else: 
-                    f = 1.0 
+                    f = 1.0 # default to set the distance as 10kpc ; still goes on first
                     logging.error('{}:  sig_distance field {} not found'.format(self.name, self.sig_distance))
             expected_total_count = expected_total_count * f * f 
 
-
-            model_edges = self.tedges + offset
+            # generate a histogram with respect to the epoch_base time scale
+            # so do self.tedges start from 0? 
+            model_edges = self.tedges + offset 
+            # problem: we need to have a common "zero-point" in the timeline 
+            # how can we do that? 
+            # is the histogram time axis generated according to the epoch_base? 
             hist_edges = np.linspace(hist.xlow, 
                                      hist.xhigh, 
-                                     hist.nbins+1)
+                                     hist.nbihns+1)
 
             # it is more convenient to use cdf for interpolation:
             model_cdf = np.concatenate(([0.0], np.cumsum(self.mu_norm)))

@@ -160,8 +160,9 @@ class DiffPointing(Node): #Node is DiffPointing 嘅 parent class!
       p2[i] = det2.get_xyz(Time(dts['t2'], format='unix'))
       i += 1
     dp = (p1 - p2) * rc # s, shape [nkeys,3] # 佢同 ddt 係掉轉方向的！！！
-    d = np.transpose(dp @ directions) # [nv,nkeys] # @ 係 matrix multiplication 
-    d = d + ddt # broadcast adding ddt to each column # 所以而家 d 就儲存緊啲 residual vectors lol
+    d = np.transpose(dp @ directions) # [nkeys, nv] --> [nv,nkeys] 
+    # theoretical - experimental:
+    d = d + ddt # broadcast adding ddt to each column 
     logging.info('ddt = {}'.format(ddt))
     logging.info('dp = {}'.format(dp))
     return d # 每個 row corresponds to 每個唔同嘅 hypotheses direction 每個 column corresponds to 唔同嘅 detector pairs
@@ -240,14 +241,16 @@ class DiffPointing(Node): #Node is DiffPointing 嘅 parent class!
     rs = cp.get_map(self.nside, t0) # rs = list of all possible supernova directions
 
     # the following was used when we assumed skymap was in GCRS
-    #rs = hp.pixelfunc.pix2vec(self.nside, range(self.npix), nest=True)
+    # rs = hp.pixelfunc.pix2vec(self.nside, range(self.npix), nest=True)
     # rs will be an np.array of x,y,z values, each triple a unit vector.
     # however, it'll be returned in shape (3,npix)
     d = self.d_vectors(keys, rs) # returns shape (npix,nkeys)
+    # 每個 row corresponds to 每個唔同嘅 hypotheses direction 每個 column corresponds to 唔同嘅 detector pairs
     dw = d @ w # returns shape (npix,nkeys) # this is just residual^T V^-1 in the paper
     m = np.zeros(self.npix)
     for i in range(self.npix):
-      m[i] = np.dot(dw[i], d[i])
+      m[i] = np.dot(dw[i], d[i]) # we are retriving each row in the dw matrix (nkeys long row vector), 
+                                  # and also dot it with each row of the d matrix (nkeys long row vector) ==> turns out we have npix numbers
 
     chi2_min = m.min()
     m -= chi2_min

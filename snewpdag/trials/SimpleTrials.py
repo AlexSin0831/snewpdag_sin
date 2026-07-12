@@ -28,6 +28,7 @@ would trigger inject() to create a new DAG from scratch.
 So we keep burst_id the same, but count using trial_id.
 """
 import sys
+import logging
 import numpy as np
 from snewpdag.dag import Node
 from snewpdag.dag.app import configure, inject

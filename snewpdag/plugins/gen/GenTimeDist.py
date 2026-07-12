@@ -31,26 +31,7 @@ Originally based on Vladimir's TimeDistFileInput, via TimeDist
 
 Need a generator for SN direction and core bounce times for each detector.
 """
-"""
-Given the true detector arrival time and a theoretical light curve,
-we generate a fake observed neutrino event time series for one detector
-Take a model lightcurve shape
-        ↓
-randomly generate neutrino event times following that shape
-        ↓
-shift those times to the detectors true arrival time
-        ↓
-add them into a TimeSeries object in the payload
-"""
-"""
-NewTimeSeries
-  creates empty TimeSeries object
-        ↓
-GenTimeDist
-  fetches that TimeSeries object
-  generates event times
-  adds them into it
-  """
+
 
 import logging
 import numpy as np
@@ -61,10 +42,11 @@ from snewpdag.dag.lib import fetch_field
 from snewpdag.values import Hist1D, TimeSeries
 from . import TimeDistSource
 
-class GenTimeDist(TimeDistSource): # OMG it is not node!!!! 
+class GenTimeDist(TimeDistSource): 
 
-  one_series = () # shared time series, if self.sig_once is True
-  one_mean = 0 # intended mean of shared time series
+  # for sig_once: 
+  one_series = () 
+  one_mean = 0 
 
   def __init__(self, field, **kwargs):
     self.field = field
@@ -73,12 +55,10 @@ class GenTimeDist(TimeDistSource): # OMG it is not node!!!!
       self.sig_t0 = ts
     elif isinstance(ts, numbers.Number): # literal
       self.sig_t0 = ts
-    # pop() 嘅好處係： 佢read完就會delete個 kwargs 
-    # 咁樣做可以確保 parent node 嘅 argument 係佢自己睇得明嘅東西
     self.sig_mean = kwargs.pop('sig_mean', 0.0)
     self.sig_distance = kwargs.pop('sig_distance', 10.0)
     self.sig_smear = kwargs.pop('sig_smear', True)
-    self.sig_once = kwargs.pop('sig_once', False) # 呢個係on9 的
+    self.sig_once = kwargs.pop('sig_once', False) 
     self.epoch_base = kwargs.pop('epoch_base', 0.0)
 
     if not isinstance(self.epoch_base, (numbers.Number, str, list, tuple)):
@@ -88,26 +68,26 @@ class GenTimeDist(TimeDistSource): # OMG it is not node!!!!
     # TimeDistSource.py 要read filename 同 filetype 所以其實 we must provide it...
     # Otherwise self.mu will be undefined...
     super().__init__(**kwargs)
-    # self.mu is from TimeDistSource.py 
-    # and you can understand it as the y-value of the histogram (theoretical intensity of a lightcurve)
-    self.area = np.sum(self.mu) 
+    self.area = np.sum(self.mu) # self.mu is the theoretical light curve by the model we provided
     self.mu_norm = self.mu / self.area # become probability density 
-    self.tedges = np.append(self.t, self.thi) # append high end to t array # self.t = lower edge and self.thi = final upper edge 
+    self.tedges = np.append(self.t, self.thi) # all the edges cuz self.t doesn't include the highest edge
 
-    # if sig_mean is 0 or an empty string, set it to self.area
+    # This controls the bias between large detectors and small detectors 
+    # But, if we forget to provide it, then it will use the model detection number to continue the calculation. 
     if self.sig_mean == 0 or self.sig_mean == "":
       self.sig_mean = self.area 
       logging.info('{}:  mean set to area {}'.format(self.name, self.area))
 
     # pre-generate single series
     if self.sig_once and np.shape(GenTimeDist.one_series) == (0,): # this means the shared set has not yet been generated
-      # choice is picking the indices of an array according to the probability distribution 
-      # self.sig_mean ==> 抽幾多粒數
-      # replace = True ==> 可以重複
-      j = Node.rng.choice(len(self.mu_norm), self.sig_mean,
-                          p=self.mu_norm, replace=True, shuffle=False) # j is an array 
+      j = Node.rng.choice(len(self.mu_norm), # [0,1,2,...,len(self.mu_norm)-1]?
+                          self.sig_mean, # choose how many?
+                          p=self.mu_norm, # probability distribution
+                          replace=True, # can have repeated time stamps
+                          shuffle=False) 
       ta = self.tedges[j]
       dt = self.tedges[j+1] - ta
+      # we need the dt to show the gap between each time stamp, and we use it to be the factor for us to add noise. 
       GenTimeDist.one_series = ta + Node.rng.random(self.sig_mean) * dt
       GenTimeDist.one_mean = self.sig_mean
     # 如果開咗 sig_once: 
@@ -172,8 +152,11 @@ class GenTimeDist(TimeDistSource): # OMG it is not node!!!!
         nev = Node.rng.poisson(mean) if self.sig_smear else mean
 
         # generate time series of offsets, with t=0 at core bounce
-        j = Node.rng.choice(len(self.mu_norm), nev,
-                            p=self.mu_norm, replace=True, shuffle=False)
+        j = Node.rng.choice(len(self.mu_norm), 
+                            nev,
+                            p=self.mu_norm, 
+                            replace=True, 
+                            shuffle=False)
         ta = self.tedges[j]
         dt = self.tedges[j+1] - ta
         a = ta + Node.rng.random(nev) * dt
@@ -184,4 +167,3 @@ class GenTimeDist(TimeDistSource): # OMG it is not node!!!!
       return data
     else:
       return False
-

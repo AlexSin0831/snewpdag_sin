@@ -39,10 +39,16 @@ class Chi2CL(Node):
       logging.info('chi2 range ({}, {}), ndof = {}'.format(np.min(v), np.max(v), data[self.in_ndof_field]))
       if self.out_area_field != '':
         to_deg2 = 360*360/(np.pi*len(c))
+        n1 = np.sum(c < 0.682689492137)
+        n90 = np.sum(c < 0.9)
+        n95 = np.sum(c < 0.95)
         data[self.out_area_field] = {
             '1sigma': np.sum(c < 0.682689492137) * to_deg2,
             '90cl': np.sum(c < 0.9) * to_deg2,
             '95cl': np.sum(c < 0.95) * to_deg2,
+            'npix_1sigma': n1,
+            'npix_90cl': n90,
+            'npix_95cl': n95,
             }
       return data
     else:

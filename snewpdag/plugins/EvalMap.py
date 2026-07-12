@@ -63,7 +63,7 @@ class EvalMap(Node):
           kc = k
 
     # choose binning
-    v = self.cache[kc]
+    v = self.cache[kc] #kc is our reference detector 
     if max_width > 0.0:
       ref_nbins = v.nbins
       ref_duration = v.xwidth
@@ -98,14 +98,14 @@ class EvalMap(Node):
       a = np.sum(sig) # signal area. Could be zero or negative.
       areas.append(a)
       i += 1
-    nn = np.array(hs)
-    ss = np.array(sigs)
-    bb = np.array(bgrs)
-    aa = np.array(areas)
+    nn = np.array(hs) # raw histograms of different detectors
+    ss = np.array(sigs) # background-removed histograms of different detectors
+    bb = np.array(bgrs) # backgrounds of different detectors
+    aa = np.array(areas) # total detection amount of different detectors
 
     # evaluate reference signal profile
     sigsum = np.sum(ss, 0)
-    ref = sigsum / np.sum(sigsum) 
+    ref = sigsum / np.sum(sigsum) # probability distribution
     logging.debug('observed  = {}'.format(nn))
     logging.debug('signal    = {}'.format(ss))
     logging.debug('reference = {}'.format(sigsum))
@@ -114,8 +114,8 @@ class EvalMap(Node):
     chi2 = 0.0
     for i in range(len(bb)): # loop over detectors
       for j in range(len(ref)): # loop over time bins
-        if aa[i] > 0:
-          pp = aa[i]*ref[j] + bb[i]
+        if aa[i] > 0: # have meaningful detection
+          pp = aa[i]*ref[j] + bb[i] # expected detection number
           if pp > 0:
             x = nn[i,j] * np.log(pp) - pp - sc.gammaln(nn[i,j] + 1) # Poisson log-likelihood 
             chi2 += x
@@ -140,7 +140,7 @@ class EvalMap(Node):
       pd[i] = det.get_xyz(t0a) # GCRS coordinates at time [m]
       i += 1
     tdet = pd @ rs / 3.0e8 # time offsets in s, rel to Earth center
-    # shape of tdet should be (nkeys,npix)
+    # shape of tdet should be (number of detectors, number of pixels)
     # test all pixels for all detectors, calculate the relative time delay 
 
     # get reference signal profile for each pixel's hypothetical direction

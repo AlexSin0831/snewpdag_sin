@@ -19,7 +19,6 @@ import os, sys, argparse, json, logging, importlib, ast, csv
 import numpy as np
 from . import Node
 
-# argparse 專門負責裝嵌 Command line 指令
 parser = argparse.ArgumentParser()
 parser.add_argument('config', help='configuration py/json/csv file')
 parser.add_argument('--input', help='input data py/json file')
@@ -33,7 +32,7 @@ parser.add_argument('--inject', help='name of default injection module',
                     default='Control')
 args = parser.parse_args()
 if args.stream:
-  try: # 預防程式崩潰
+  try:
     from hop import stream
   except:
     logging.info('Cannot import the hop client')

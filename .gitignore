@@ -7,3 +7,4 @@ jobs/**
 SNEWS_ALERTS/**
 .DS_Store
 .vscode/
+models/node_modules/

@@ -16,11 +16,12 @@ import csv
 import logging
 import numpy as np
 import healpy as hp
-from numpy.core.numeric import Inf
 from scipy.stats import chi2
 from datetime import datetime
 
 from snewpdag.dag import Node
+
+Inf = np.inf
 
 
 class Chi2Calculator(Node):
