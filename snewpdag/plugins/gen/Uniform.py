@@ -31,7 +31,6 @@ class Uniform (Node):
   def alert(self, data):
     v, flag = fetch_field(data, self.field)
     if flag:
-      v = data[self.field]
       if not isinstance(v, TimeSeries) and not isinstance(v, Hist1D):
         logging.error('Uniform.alert: field is neither TimeSeries nor Hist1D')
         return False
@@ -43,10 +42,19 @@ class Uniform (Node):
       #   (but need to adjust means for partial bins at ends)
       # * for Hist1D, and TimeSeries with limits, can restrict generation
       #   to within those limits, rather than over the whole (tmin,tmax) 
+      if isinstance(v, TimeSeries):
+        nev = Node.rng.poisson(self.mean_total) # Poisson fluctuations around mean
+        u = (self.tmax - self.tmin) * Node.rng.random(size=nev, dtype=np.float64) + self.tmin
+        v.add(u)
+        return True
 
-      nev = Node.rng.poisson(self.mean_total) # Poisson fluctuations around mean
-      u = (self.tmax - self.tmin) * Node.rng.random(size=nev, dtype=np.float64) + self.tmin
-      v.add(u)
+      bin_edges = np.linspace(v.xlow, v.xhigh, v.nbins + 1)
+      overlap_low = np.maximum(bin_edges[:-1], self.tmin)
+      overlap_high = np.minimum(bin_edges[1:], self.tmax)
+      overlap_widths = np.maximum(overlap_high - overlap_low, 0.0)
+      expected_bin_counts = self.rate * overlap_widths
+
+      v.bins += Node.rng.poisson(expected_bin_counts)
       return True
     else:
       return False

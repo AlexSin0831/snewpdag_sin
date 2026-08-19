@@ -28,6 +28,7 @@ from .DetectorTime import DetectorTime
 from .GenPoint import GenPoint
 from .GenPointDts import GenPointDts
 from .GenTimeDist import GenTimeDist
+from .GenTimeDist_IceCube import GenTimeDist_IceCube
 
 from .TrueTimes import TrueTimes
 from .SmearTimes import SmearTimes
