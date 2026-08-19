@@ -73,8 +73,8 @@ pull1-series,Accumulator,sigma1-series,"'title':'pull','in_field':('dts',('SK','
 delta1-series,Accumulator,pull1-series,"'title':'delta','in_field':('dts',('SK','SNOP'),'delta'),'out_field':'delta1_series','alert_pass':True,'clear_on':[]",,,,,
 delta-sigma-scatter1,renderers.ScatterPlot,delta1-series,"'title':'raw difference vs estimated uncertainty (SK-SNOP)','xlabel':'raw difference','ylabel':'estimated uncertainty','filename':'[png_pattern]','x_in_field':'delta1_series','x_in_field2':'series','y_in_field':'sigma1_series','y_in_field2':'series'",,,,,
 dev-sigma-scatter1,renderers.ScatterPlot,sigma1-series,"'title':'debiased difference vs estimated uncertainty (SK-SNOP)','xlabel':'debiased difference','ylabel':'estimated uncertainty','filename':'[png_pattern]','x_in_field':'dev1_series','x_in_field2':'series','y_in_field':'sigma1_series','y_in_field2':'series'",,,,,
-,,,,,dev-sigma-json1,renderers.JsonOutput,sigma1-series,"'fields':('dev1_series','sigma_series'),'filename':'json.out','on':['report']"
-,,,,,dev-sigma-out1,Pass,dev-sigma-json1,"'line':1,'dump':1"
+dev-sigma-json1,renderers.JsonOutput,sigma1-series,"'fields':('dev1_series','sigma_series'),'filename':'json.out','on':['report']",,,,,
+dev-sigma-out1,Pass,dev-sigma-json1,"'line':1,'dump':1",,,,,
 pull-sigma-scatter1,renderers.ScatterPlot,pull1-series,"'title':'debiased difference pull vs estimated uncertainty (SK-SNOP)','xlabel':'debiased difference pull','ylabel':'estimated uncertainty','filename':'[png_pattern]','x_in_field':'pull1_series','x_in_field2':'series','y_in_field':'sigma1_series','y_in_field2':'series'",,,,,
 ,,,,,,,,
 delta2-acc,ops.FillHist1D,diff2,"'nbins':1000,'xlow':-0.1,'xhigh':0.1,'in_field':('dts',('SK','JUNO'),'delta'),'out_field':'delta2_hist'",,,,,

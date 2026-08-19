@@ -38,6 +38,7 @@ from snewpdag.dag import Node
 from snewpdag.dag.lib import fetch_field
 from snewpdag.values import Hist1D, TimeSeries
 from . import TimeDistSource
+from astropy.time import Time
 
 class GenTimeDist_IceCube (TimeDistSource):
     def __init__(self, field, **kwargs):
@@ -54,6 +55,7 @@ class GenTimeDist_IceCube (TimeDistSource):
         self.sig_distance = kwargs.pop('sig_distance', 10.0)
         self.sig_smear = kwargs.pop('sig_smear', True)
         self.epoch_base = kwargs.pop('epoch_base', 0.0)
+        self.bin_width = kwargs.pop('bin_width', 0.002)   #IceCube default bin-width
 
         if not isinstance(self.epoch_base, (numbers.Number, str, list, tuple)):
             logging.error('GenTimeDist.__init__: unrecognized epoch_base {}. Set to 0.'.format(self.epoch_base))
@@ -123,7 +125,7 @@ class GenTimeDist_IceCube (TimeDistSource):
             # is the histogram time axis generated according to the epoch_base? 
             hist_edges = np.linspace(hist.xlow, 
                                      hist.xhigh, 
-                                     hist.nbihns+1)
+                                     hist.nbins+1)
 
             # it is more convenient to use cdf for interpolation:
             model_cdf = np.concatenate(([0.0], np.cumsum(self.mu_norm)))
@@ -134,6 +136,7 @@ class GenTimeDist_IceCube (TimeDistSource):
                                  right = model_cdf[-1]
                                  )
             
+            # array that saves the counts of the histogram
             expected_bin_counts = expected_total_count * np.diff(hist_cdf) 
 
                                        

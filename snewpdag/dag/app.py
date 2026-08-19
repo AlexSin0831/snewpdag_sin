@@ -100,7 +100,7 @@ def run():
   cfn, cfx = os.path.splitext(args.config)
   if cfx == '.csv':
     # name, class, observe
-    with open(args.config, 'r') as f:
+    with open(args.config, 'r', encoding='utf-8-sig') as f:
       nodespecs = csv_eval(f)
   else: # try python/json parsing if not csv
     with open(args.config, 'r') as f:

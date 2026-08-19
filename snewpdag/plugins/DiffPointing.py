@@ -51,7 +51,7 @@ Find:
 """
 
 """
-DiffTimes outputs data['dts']
+Some node outputs data['dts']
         ↓
 DiffPointing.alert(data) receives the payload
         ↓
@@ -61,6 +61,7 @@ DiffPointing stores it in self.cache
         ↓
 DiffPointing uses self.cache to calculate the sky map
 """
+
 import sys
 import logging
 import numpy as np

@@ -1,0 +1,26 @@
+executable = /data/snoplus3/sin2/snewpdag/run_poisson_v9_mc_multiple.sh
+
+arguments = $(Process) 5 \
+  --det1 SuperK \
+  --det2 SNOPLUS \
+  --true-lag 0.022 \
+  --hist-bin-width 0.002 \
+  --window-size 9.2 \
+  --window-start -0.6 \
+  --coarse-lag-step 0.005 \
+  --fine-lag-step 0.0001 \
+  --hist1-ic \
+  --smoothing \
+  --toy \
+  --sigma-gnd 0.005 \
+  --run-name superk-snoplus_lag0p022_binwidth0p002_v9
+
+output = /data/snoplus3/sin2/snewpdag/logs/poisson_v9_batch5.$(Cluster).$(Process).out
+error  = /data/snoplus3/sin2/snewpdag/logs/poisson_v9_batch5.$(Cluster).$(Process).err
+log    = /data/snoplus3/sin2/snewpdag/logs/poisson_v9_batch5.$(Cluster).log
+
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+
+queue 200

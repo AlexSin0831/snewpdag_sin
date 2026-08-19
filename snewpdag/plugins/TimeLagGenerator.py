@@ -1,5 +1,19 @@
 """
-Generate lag grids for coarse or fine likelihood scans.
+TimeLagGenerator: Generate lag grids for coarse or fine likelihood scans.
+
+configuration: 
+    out_field       : field name of the time lags
+
+    (Optional:)
+    scan_low        : lower limit of the scanning range
+    scan_high       : higher limit of the scanning range 
+    scan_centre     : centre of the scanning region
+    scan_half_width : span / 2 of the scanning region
+    step_size       : step size of scanning
+    coarse_step     : step size of coarse-scanning 
+    fine_step       : step size of fine-scanning
+    scan_type       : coarse / fine 
+    in_roi_field    : field name of the fine scan region 
 """
 
 import logging
@@ -29,16 +43,19 @@ def making_grids(low, high, step_size):
   return values_array
 
 class TimeLagGenerator(Node):
-  def __init__(self, out_field, scan_low=None, scan_high=None, **kwargs):
+  def __init__(self, out_field, **kwargs):
     self.out_field = out_field
-    self.scan_low = scan_low
-    self.scan_high = scan_high
+    self.scan_low = kwargs.pop('scan_low', None)
+    self.scan_high = kwargs.pop('scan_high', None)
+    self.scan_centre = kwargs.pop('scan_centre', None)
+    self.scan_half_width = kwargs.pop('scan_half_width', None)
+
     # for simple testing:
     self.step_size = kwargs.pop('step_size', kwargs.pop('step', None))
 
     # for more general workflow: 
-    self.coarse_step_size = kwargs.pop('coarse_step', None)
-    self.fine_step_size = kwargs.pop('fine_step', None)
+    self.coarse_step = kwargs.pop('coarse_step', None)
+    self.fine_step = kwargs.pop('fine_step', None)
     self.scan_type = kwargs.pop('scan_type', 'coarse')
     self.in_roi_field = kwargs.pop('in_roi_field', None)
     super().__init__(**kwargs)
@@ -51,9 +68,14 @@ class TimeLagGenerator(Node):
         if isinstance(roi, dict):
           return roi['low'], roi['high']
         return roi[0], roi[1]
-      
+    
+    # scan_centre case: 
+    if self.scan_centre is not None and self.scan_half_width is not None:
+      return self.scan_centre - self.scan_half_width, self.scan_centre + self.scan_half_width
+    
     # simple cases:
-    return self.scan_low, self.scan_high
+    if self.scan_low is not None and self.scan_high is not None:
+      return self.scan_low, self.scan_high
 
   def alert(self, data):
     real_scan_low, real_scan_high = self.define_bounds(data)
@@ -64,7 +86,7 @@ class TimeLagGenerator(Node):
 
     real_step_size = self.step_size
     if real_step_size is None:
-      real_step_size = self.fine_step_size if self.scan_type == 'fine' else self.coarse_step_size
+      real_step_size = self.fine_step if self.scan_type == 'fine' else self.coarse_step
     
     # didn't provide all kinds of step_size
     if real_step_size is None:

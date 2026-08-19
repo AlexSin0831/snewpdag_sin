@@ -16,7 +16,7 @@ from snewpdag.values import Hist1D
 class NewHist1D(Node):
   def __init__(self, out_field, nbins, start, stop, **kwargs):
     self.out_field = out_field
-    self.nbins = nbins
+    self.nbins = nbins # remember that NewHist1D.py use nbins to be its parameter, instead of bin-width.
     self.start = start
     if isinstance(self.start, str):
       self.start = Time(self.start).to_value('unix', 'long')

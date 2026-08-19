@@ -1,0 +1,115 @@
+﻿Control,Pass,,'line': 100
+SN-times,gen.TrueTimes,Control,"'detector_location':'snewpdag/data/detector_location.csv', 'detectors': ['SNOP','SK','IC','JUNO'], 'ra':$RA, 'dec':$DEC, 'time':'2021-11-01 05:22:36.328','epoch_base':$EPOCH_BASE"
+SN,Write,SN-times,"'on':['alert','report'],'write':(('png_pattern','output/$TAG-$MODEL-$SPECIES-y$YIELD_IC-y$YIELD_SK-y$YIELD_SNOPLUS-y$YIELD_JUNO-d$DISTANCE-{}-{}-{}.png'),('py_pattern','output/$TAG-$MODEL-$SPECIES-y$YIELD_IC-y$YIELD_SK-y$YIELD_SNOPLUS-y$YIELD_JUNO-d$DISTANCE-{}-{}-{}.py'),('fits_pattern','output/$TAG-$MODEL-$SPECIES-y$YIELD_IC-y$YIELD_SK-y$YIELD_SNOPLUS-y$YIELD_JUNO-d$DISTANCE-{}-{}-{}.fits'),('coincident_detectors',['IC','SNOP','SK','JUNO']),)"
+SN-out,Pass,SN,"'line':100, 'dump':0"
+,,,
+IC-new,ops.NewHist1D,SN,"'out_field':'histogram1','nbins':3000,'start':-3.0,'stop':3.0"
+IC-bg,gen.Uniform,IC-new,"'field':'histogram1','rate':$BG_IC,'tmin':-3.0,'tmax':3.0"
+IC-signal,gen.GenTimeDist_IceCube,IC-bg,"'field':'histogram1','sig_mean':$YIELD_IC,'sig_distance':$DISTANCE,'sig_t0':('truth','dets','IC','true_t'),'sig_filetype':'tn','sig_delimiter':',','sig_filename':'/Users/alexsin/Desktop/SURE/snewpdag/models/$CHANNEL-$MODEL-nmo-wc.data'"
+IC-data,Write,IC-signal,"'on':['alert'],'write':(('detector','IC'),)"
+,,,
+SK-new,ops.NewTimeSeries,IC-data,"'out_field':'timeseries1','start':-3.0,'stop':3.0"
+SK-bg,gen.Uniform,SK-new,"'field':'timeseries1','rate':$BG_SK,'tmin':-3.0,'tmax':3.0"
+SK-signal,gen.GenTimeDist,SK-bg,"'field':'timeseries1','sig_mean':$YIELD_SK,'sig_distance':$DISTANCE,'sig_t0':('truth','dets','SK','true_t'),'sig_filetype':'tn','sig_delimiter':',','sig_filename':'/Users/alexsin/Desktop/SURE/snewpdag/models/$CHANNEL-$MODEL-nmo-wc.data'"
+SK-data,Write,SK-signal,"'on':['alert'],'write':(('detector','SK'),)"
+,,,
+SNOP-new,ops.NewTimeSeries,SK-data,"'out_field':'timeseries2','start':-3.0,'stop':3.0"
+SNOP-bg,gen.Uniform,SNOP-new,"'field':'timeseries2','rate':$BG_SNOPLUS,'tmin':-3.0,'tmax':3.0"
+SNOP-signal,gen.GenTimeDist,SNOP-bg,"'field':'timeseries2','sig_mean':$YIELD_SNOPLUS,'sig_distance':$DISTANCE,'sig_t0':('truth','dets','SNOP','true_t'),'sig_filetype':'tn','sig_delimiter':',','sig_filename':'/Users/alexsin/Desktop/SURE/snewpdag/models/$CHANNEL-$MODEL-nmo-scint.data'"
+SNOP-data,Write,SNOP-signal,"'on':['alert'],'write':(('detector','SNOP'),)"
+,,,
+JUNO-new,ops.NewTimeSeries,SNOP-data,"'out_field':'timeseries3','start':-3.0,'stop':3.0"
+JUNO-bg,gen.Uniform,JUNO-new,"'field':'timeseries3','rate':$BG_JUNO,'tmin':-3.0,'tmax':3.0"
+JUNO-signal,gen.GenTimeDist,JUNO-bg,"'field':'timeseries3','sig_mean':$YIELD_JUNO,'sig_distance':$DISTANCE,'sig_t0':('truth','dets','JUNO','true_t'),'sig_filetype':'tn','sig_delimiter':',','sig_filename':'/Users/alexsin/Desktop/SURE/snewpdag/models/$CHANNEL-$MODEL-nmo-scint.data'"
+JUNO-data,Write,JUNO-signal,"'on':['alert'],'write':(('detector','JUNO'),)"
+,,,
+Coarse-scan,TimeLagGenerator,JUNO-data,"'out_field':'possible_time_lag_list','scan_centre':0.0, 'scan_half_width': 1.0, 'coarse_step':0.01,'scan_type':'coarse'"
+,,,
+Pair_1,PairTimeSeriesToHist,Coarse-scan,"'in_hist1_field':'histogram1','in_ts2_field':'timeseries1','out_hist_field':'hist1','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'possible_time_lag_list','hist1_ic':True"
+Smooth_Toy_1,PairTimeSeriesToHist_Smoothing_Toy,Coarse-scan,"'in_hist1_field':'histogram1','in_ts2_field':'timeseries1','out_hist_field':'hist1_toy','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'possible_time_lag_list','hist1_ic':True,'sigma_gnd':$SIGMA_GND,'impact_range':$IMPACT_RANGE,'cache_hist1':$CACHE_HIST1,'det1':'IceCube'"
+,,,
+Pair_2,PairTimeSeriesToHist,Coarse-scan,"'in_hist1_field':'histogram1','in_ts2_field':'timeseries2','out_hist_field':'hist2','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'possible_time_lag_list','hist1_ic':True"
+Smooth_Toy_2,PairTimeSeriesToHist_Smoothing_Toy,Coarse-scan,"'in_hist1_field':'histogram1','in_ts2_field':'timeseries2','out_hist_field':'hist2_toy','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'possible_time_lag_list','hist1_ic':True,'sigma_gnd':$SIGMA_GND,'impact_range':$IMPACT_RANGE,'cache_hist1':$CACHE_HIST1,'det1':'IceCube'"
+,,,
+Pair_3,PairTimeSeriesToHist,Coarse-scan,"'in_ts1_field':'timeseries1','in_ts2_field':'timeseries3','out_hist_field':'hist3','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'possible_time_lag_list'"
+Smooth_Toy_3,PairTimeSeriesToHist_Smoothing_Toy,Coarse-scan,"'in_ts1_field':'timeseries1','in_ts2_field':'timeseries3','out_hist_field':'hist3_toy','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'possible_time_lag_list','sigma_gnd':$SIGMA_GND,'impact_range':$IMPACT_RANGE,'cache_hist1':$CACHE_HIST1,'det1':'SuperK'"
+,,,
+Like_1,PoissonLagLikelihood_v6,Pair_1,"'in_hist_field':'hist1','out_field':'like1','sen_1':$SEN_IC,'sen_2':$SEN_SK,'bg_1':$BG_IC,'bg_2':$BG_SK"
+Like_Toy_1,PoissonLagLikelihood_v6,Smooth_Toy_1,"'in_hist_field':'hist1_toy','out_field':'like1_toy','sen_1':$SEN_IC,'sen_2':$SEN_SK,'bg_1':$BG_IC,'bg_2':$BG_SK"
+,,,
+Like_2,PoissonLagLikelihood_v6,Pair_2,"'in_hist_field':'hist2','out_field':'like2','sen_1':$SEN_IC,'sen_2':$SEN_SNOPLUS,'bg_1':$BG_IC,'bg_2':$BG_SNOPLUS"
+Like_Toy_2,PoissonLagLikelihood_v6,Smooth_Toy_2,"'in_hist_field':'hist2_toy','out_field':'like2_toy','sen_1':$SEN_IC,'sen_2':$SEN_SNOPLUS,'bg_1':$BG_IC,'bg_2':$BG_SNOPLUS"
+,,,
+Like_3,PoissonLagLikelihood_v6,Pair_3,"'in_hist_field':'hist3','out_field':'like3','sen_1':$SEN_SK,'sen_2':$SEN_JUNO,'bg_1':$BG_SK,'bg_2':$BG_JUNO"
+Like_Toy_3,PoissonLagLikelihood_v6,Smooth_Toy_3,"'in_hist_field':'hist3_toy','out_field':'like3_toy','sen_1':$SEN_SK,'sen_2':$SEN_JUNO,'bg_1':$BG_SK,'bg_2':$BG_JUNO"
+,,,
+Collect_1,LikelihoodScanCollector,Like_1,"'input_field':'like1','out_field':'collect1','scan_type':'coarse'"
+Collect_Toy_1,LikelihoodScanCollector,Like_Toy_1,"'input_field':'like1_toy','out_field':'collect1_toy','scan_type':'coarse'"
+,,,
+Collect_2,LikelihoodScanCollector,Like_2,"'input_field':'like2','out_field':'collect2','scan_type':'coarse'"
+Collect_Toy_2,LikelihoodScanCollector,Like_Toy_2,"'input_field':'like2_toy','out_field':'collect2_toy','scan_type':'coarse'"
+,,,
+Collect_3,LikelihoodScanCollector,Like_3,"'input_field':'like3','out_field':'collect3','scan_type':'coarse'"
+Collect_Toy_3,LikelihoodScanCollector,Like_Toy_3,"'input_field':'like3_toy','out_field':'collect3_toy','scan_type':'coarse'"
+,,,
+Fine-scan_1,TimeLagGenerator,Collect_1,"'out_field':'fine_time_lag_list','fine_step':0.001,'in_roi_field':'collect1/roi','scan_type':'fine'"
+Fine-scan_Toy_1,TimeLagGenerator,Collect_Toy_1,"'out_field':'fine_time_lag_list','fine_step':0.001,'in_roi_field':'collect1_toy/roi','scan_type':'fine'"
+,,,
+Fine-scan_2,TimeLagGenerator,Collect_2,"'out_field':'fine_time_lag_list','fine_step':0.001,'in_roi_field':'collect2/roi','scan_type':'fine'"
+Fine-scan_Toy_2,TimeLagGenerator,Collect_Toy_2,"'out_field':'fine_time_lag_list','fine_step':0.001,'in_roi_field':'collect2_toy/roi','scan_type':'fine'"
+,,,
+Fine-scan_3,TimeLagGenerator,Collect_3,"'out_field':'fine_time_lag_list','fine_step':0.001,'in_roi_field':'collect3/roi','scan_type':'fine'"
+Fine-scan_Toy_3,TimeLagGenerator,Collect_Toy_3,"'out_field':'fine_time_lag_list','fine_step':0.001,'in_roi_field':'collect3_toy/roi','scan_type':'fine'"
+,,,
+Fine-Pair_1,PairTimeSeriesToHist,Fine-scan_1,"'in_hist1_field':'histogram1','in_ts2_field':'timeseries1','out_hist_field':'fine_hist1','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'fine_time_lag_list','hist1_ic':True"
+Fine-Smooth_Toy_1,PairTimeSeriesToHist_Smoothing_Toy,Fine-scan_Toy_1,"'in_hist1_field':'histogram1','in_ts2_field':'timeseries1','out_hist_field':'fine_hist1_toy','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'fine_time_lag_list','hist1_ic':True,'sigma_gnd':$SIGMA_GND,'impact_range':$IMPACT_RANGE,'cache_hist1':$CACHE_HIST1,'det1':'IceCube'"
+,,,
+Fine-Pair_2,PairTimeSeriesToHist,Fine-scan_2,"'in_hist1_field':'histogram1','in_ts2_field':'timeseries2','out_hist_field':'fine_hist2','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'fine_time_lag_list','hist1_ic':True"
+Fine-Smooth_Toy_2,PairTimeSeriesToHist_Smoothing_Toy,Fine-scan_Toy_2,"'in_hist1_field':'histogram1','in_ts2_field':'timeseries2','out_hist_field':'fine_hist2_toy','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'fine_time_lag_list','hist1_ic':True,'sigma_gnd':$SIGMA_GND,'impact_range':$IMPACT_RANGE,'cache_hist1':$CACHE_HIST1,'det1':'IceCube'"
+,,,
+Fine-Pair_3,PairTimeSeriesToHist,Fine-scan_3,"'in_ts1_field':'timeseries1','in_ts2_field':'timeseries3','out_hist_field':'fine_hist3','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'fine_time_lag_list'"
+Fine-Smooth_Toy_3,PairTimeSeriesToHist_Smoothing_Toy,Fine-scan_Toy_3,"'in_ts1_field':'timeseries1','in_ts2_field':'timeseries3','out_hist_field':'fine_hist3_toy','bin_width':$BIN_WIDTH,'window_size':$WINDOW_SIZE,'window_start':$WINDOW_START,'lags_field':'fine_time_lag_list','sigma_gnd':$SIGMA_GND,'impact_range':$IMPACT_RANGE,'cache_hist1':$CACHE_HIST1,'det1':'SuperK'"
+,,,
+Fine-Like_1,PoissonLagLikelihood_v6,Fine-Pair_1,"'in_hist_field':'fine_hist1','out_field':'fine_like1','sen_1':$SEN_IC,'sen_2':$SEN_SK,'bg_1':$BG_IC,'bg_2':$BG_SK"
+Fine-Like_Toy_1,PoissonLagLikelihood_v6,Fine-Smooth_Toy_1,"'in_hist_field':'fine_hist1_toy','out_field':'fine_like1_toy','sen_1':$SEN_IC,'sen_2':$SEN_SK,'bg_1':$BG_IC,'bg_2':$BG_SK"
+,,,
+Fine-Like_2,PoissonLagLikelihood_v6,Fine-Pair_2,"'in_hist_field':'fine_hist2','out_field':'fine_like2','sen_1':$SEN_IC,'sen_2':$SEN_SNOPLUS,'bg_1':$BG_IC,'bg_2':$BG_SNOPLUS"
+Fine-Like_Toy_2,PoissonLagLikelihood_v6,Fine-Smooth_Toy_2,"'in_hist_field':'fine_hist2_toy','out_field':'fine_like2_toy','sen_1':$SEN_IC,'sen_2':$SEN_SNOPLUS,'bg_1':$BG_IC,'bg_2':$BG_SNOPLUS"
+,,,
+Fine-Like_3,PoissonLagLikelihood_v6,Fine-Pair_3,"'in_hist_field':'fine_hist3','out_field':'fine_like3','sen_1':$SEN_SK,'sen_2':$SEN_JUNO,'bg_1':$BG_SK,'bg_2':$BG_JUNO"
+Fine-Like_Toy_3,PoissonLagLikelihood_v6,Fine-Smooth_Toy_3,"'in_hist_field':'fine_hist3_toy','out_field':'fine_like3_toy','sen_1':$SEN_SK,'sen_2':$SEN_JUNO,'bg_1':$BG_SK,'bg_2':$BG_JUNO"
+,,,
+Fine-Collect_1,LikelihoodScanCollector,Fine-Like_1,"'input_field':'fine_like1','out_field':'fine_collect1','scan_type':'fine'"
+Fine-Collect_Toy_1,LikelihoodScanCollector,Fine-Like_Toy_1,"'input_field':'fine_like1_toy','out_field':'fine_collect1_toy','scan_type':'fine'"
+,,,
+Fine-Collect_2,LikelihoodScanCollector,Fine-Like_2,"'input_field':'fine_like2','out_field':'fine_collect2','scan_type':'fine'"
+Fine-Collect_Toy_2,LikelihoodScanCollector,Fine-Like_Toy_2,"'input_field':'fine_like2_toy','out_field':'fine_collect2_toy','scan_type':'fine'"
+,,,
+Fine-Collect_3,LikelihoodScanCollector,Fine-Like_3,"'input_field':'fine_like3','out_field':'fine_collect3','scan_type':'fine'"
+Fine-Collect_Toy_3,LikelihoodScanCollector,Fine-Like_Toy_3,"'input_field':'fine_like3_toy','out_field':'fine_collect3_toy','scan_type':'fine'"
+,,,
+Dts_1,LikelihoodScanToDts,Fine-Collect_1,"'input_field':'fine_collect1','out_field':'dts','out_key':('IC','SK'),'reference_time':$EPOCH_BASE,'lag_sign':-1.0,'covariance_mode':'detector_db','bias':0.0,'detector_location':'snewpdag/data/detector_location.csv'"
+Dts_Toy_1,LikelihoodScanToDts,Fine-Collect_Toy_1,"'input_field':'fine_collect1_toy','out_field':'dts','out_key':('IC','SK'),'reference_time':$EPOCH_BASE,'lag_sign':-1.0,'variance_mode':'plot','covariance_mode':'detector_db','bias':0.0,'detector_location':'snewpdag/data/detector_location.csv'"
+,,,
+Dts_2,LikelihoodScanToDts,Fine-Collect_2,"'input_field':'fine_collect2','out_field':'dts','out_key':('IC','SNOP'),'reference_time':$EPOCH_BASE,'lag_sign':-1.0,'covariance_mode':'detector_db','bias':0.0,'detector_location':'snewpdag/data/detector_location.csv'"
+Dts_Toy_2,LikelihoodScanToDts,Fine-Collect_Toy_2,"'input_field':'fine_collect2_toy','out_field':'dts','out_key':('IC','SNOP'),'reference_time':$EPOCH_BASE,'lag_sign':-1.0,'variance_mode':'plot','covariance_mode':'detector_db','bias':0.0,'detector_location':'snewpdag/data/detector_location.csv'"
+,,,
+Dts_3,LikelihoodScanToDts,Fine-Collect_3,"'input_field':'fine_collect3','out_field':'dts','out_key':('SK','JUNO'),'reference_time':$EPOCH_BASE,'lag_sign':-1.0,'covariance_mode':'detector_db','bias':0.0,'detector_location':'snewpdag/data/detector_location.csv'"
+Dts_Toy_3,LikelihoodScanToDts,Fine-Collect_Toy_3,"'input_field':'fine_collect3_toy','out_field':'dts','out_key':('SK','JUNO'),'reference_time':$EPOCH_BASE,'lag_sign':-1.0,'variance_mode':'plot','covariance_mode':'detector_db','bias':0.0,'detector_location':'snewpdag/data/detector_location.csv'"
+,,,
+Point_Raw,DiffPointing,"Dts_1,Dts_2,Dts_3","'detector_location':'snewpdag/data/detector_location.csv','nside':32,'min_dts':3"
+Prob_Raw,Chi2Prob,Point_Raw,"'in_field':'map','in_ndof_field':'ndof','out_field':'probmap_raw'"
+ProbMap_Raw,renderers.Mollview,Prob_Raw,"'on':['alert'],'in_field':'probmap_raw','title':'Raw likelihood probability map','units':'Probability','range':(0,),'coord':['C'],'filename':'[png_pattern]','scriptname':'[py_pattern]'"
+CL_Raw,Chi2CL,Point_Raw,"'in_field':'map','in_ndof_field':'ndof','out_field':'clmap_raw'"
+CLMap_Raw,renderers.Mollview,CL_Raw,"'on':['alert'],'in_field':'clmap_raw','title':'Raw likelihood confidence map','units':'Confidence level','range':(0,1),'coord':['C'],'filename':'[png_pattern]','scriptname':'[py_pattern]'"
+,,,
+Point_Toy,DiffPointing,"Dts_Toy_1,Dts_Toy_2,Dts_Toy_3","'detector_location':'snewpdag/data/detector_location.csv','nside':32,'min_dts':3"
+Prob_Toy,Chi2Prob,Point_Toy,"'in_field':'map','in_ndof_field':'ndof','out_field':'probmap_toy'"
+ProbMap_Toy,renderers.Mollview,Prob_Toy,"'on':['alert'],'in_field':'probmap_toy','title':'Gaussian smoothing probability map','units':'Probability','range':(0,),'coord':['C'],'filename':'[png_pattern]','scriptname':'[py_pattern]'"
+CL_Toy,Chi2CL,Point_Toy,"'in_field':'map','in_ndof_field':'ndof','out_field':'clmap_toy'"
+CLMap_Toy,renderers.Mollview,CL_Toy,"'on':['alert'],'in_field':'clmap_toy','title':'Gaussian smoothing confidence map','units':'Confidence level','range':(0,1),'coord':['C'],'filename':'[png_pattern]','scriptname':'[py_pattern]'"
+,,,
+Count_Raw,HistogramSkymap,Point_Raw,"'nside':32,'in_field':'map_zeroes','out_field':'bestfit_counts_raw','out_err_field':'bestfit_errors_raw'"
+SummaryMap_Raw,renderers.Mollview,Count_Raw,"'on':['report'],'in_field':'bestfit_counts_raw','title':'Raw likelihood best-fit directions over MC trials','units':'Trials','range':(0,),'coord':['C'],'filename':'[png_pattern]','scriptname':'[py_pattern]'"
+Count_Toy,HistogramSkymap,Point_Toy,"'nside':32,'in_field':'map_zeroes','out_field':'bestfit_counts_toy','out_err_field':'bestfit_errors_toy'"
+SummaryMap_Toy,renderers.Mollview,Count_Toy,"'on':['report'],'in_field':'bestfit_counts_toy','title':'Gaussian smoothing best-fit directions over MC trials','units':'Trials','range':(0,),'coord':['C'],'filename':'[png_pattern]','scriptname':'[py_pattern]'"

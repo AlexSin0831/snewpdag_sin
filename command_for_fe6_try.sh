@@ -1,11 +1,9 @@
 # model can be s27 or s11
 
-
-
 cd /Users/alexsin/Desktop/SURE/snewpdag
 mkdir -p output
 
-python -m snewpdag.trials.Simple Control -n 1000 | \
+python -m snewpdag.trials.Simple Control -n 10 | \
 env MPLCONFIGDIR=/private/tmp/snewpdag-mpl \
     TAG=fe6_try \
     MODEL=s27 \

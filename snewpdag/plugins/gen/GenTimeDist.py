@@ -41,6 +41,8 @@ from snewpdag.dag import Node
 from snewpdag.dag.lib import fetch_field
 from snewpdag.values import Hist1D, TimeSeries
 from . import TimeDistSource
+from astropy.time import Time
+
 
 class GenTimeDist(TimeDistSource): 
 
@@ -50,11 +52,12 @@ class GenTimeDist(TimeDistSource):
 
   def __init__(self, field, **kwargs):
     self.field = field
+    # optional arguments:
     ts = kwargs.pop('sig_t0', 0.0)
     if isinstance(ts, (list, tuple, str)): # field specifier
-      self.sig_t0 = ts
-    elif isinstance(ts, numbers.Number): # literal
-      self.sig_t0 = ts
+        self.sig_t0 = ts
+    elif isinstance(ts, numbers.Number): 
+        self.sig_t0 = ts
     self.sig_mean = kwargs.pop('sig_mean', 0.0)
     self.sig_distance = kwargs.pop('sig_distance', 10.0)
     self.sig_smear = kwargs.pop('sig_smear', True)

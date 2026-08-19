@@ -3,6 +3,7 @@ Hist1D - a 1D histogram value with evenly-spaced bins
 """
 import logging
 import numpy as np
+import sys 
 
 class Hist1D:
   def __init__(self, nbins, xlow, xhigh):

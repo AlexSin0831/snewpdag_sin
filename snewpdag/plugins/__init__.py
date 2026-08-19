@@ -59,14 +59,19 @@ from .FirstEventDebias import FirstEventDebias
 from .CoincSeries import CoincSeries
 from .FirstEventDiff import FirstEventDiff
 from .PairTimeSeriesToHist import PairTimeSeriesToHist
+from .PairTimeSeriesToHist_Smoothing import PairTimeSeriesToHist_Smoothing
+from .PairTimeSeriesToHist_Smoothing_Toy import PairTimeSeriesToHist_Smoothing_Toy
 from .TimeLagGenerator import TimeLagGenerator
 from .PoissonLagLikelihood_v1 import PoissonLagLikelihood_v1
 from .PoissonLagLikelihood_v2 import PoissonLagLikelihood_v2
 from .PoissonLagLikelihood_v3 import PoissonLagLikelihood_v3
 from .PoissonLagLikelihood_v4 import PoissonLagLikelihood_v4
 from .PoissonLagLikelihood_v5 import PoissonLagLikelihood_v5
+from .PoissonLagLikelihood_v6 import PoissonLagLikelihood_v6
+from .PoissonLagLikelihood_v7 import PoissonLagLikelihood_v7
+from .PoissonLagLikelihood_v8 import PoissonLagLikelihood_v8
 from .LikelihoodScanCollector import LikelihoodScanCollector
-from .LikelihoodPeakRefiner import LikelihoodPeakRefiner
+from .LikelihoodScanToDts import LikelihoodScanToDts
 
 #from .DtsCalculator import DtsCalculator # needs to be updated
 from .DiffTimes import DiffTimes

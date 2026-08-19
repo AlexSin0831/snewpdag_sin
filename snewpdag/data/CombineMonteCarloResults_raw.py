@@ -1,6 +1,6 @@
 """
-Read all the "SINGLE-ROW" files from each trial, and combine them into ONE SUMMARY TABLE 
-Also plot the PULL DISTRIBUTION 
+Read all the "SINGLE-ROW" files from each trial, combine them into one table,
+and plot the raw best-lag residual distribution.
 """
 
 import argparse
@@ -18,7 +18,7 @@ DEFAULT_MC_DIR = PROJECT_ROOT / 'output' / 'mc_v4'
 
 def parse_args():
   parser = argparse.ArgumentParser(
-      description='Combine v4 Monte Carlo trial CSV files.'
+      description='Combine Monte Carlo trial CSV files.'
   )
 
   # run-dir is the folder for the entire Monte Carlo campaign 
@@ -35,7 +35,7 @@ def parse_args():
   parser.add_argument('--pull-plot', type=Path, default=None,
                       help='Output PNG file for pull histogram.')
   
-  parser.add_argument('--bins', type=int, default=20,
+  parser.add_argument('--bins', type=int, default=30,
                       help='Number of histogram bins for the pull plot.')
   
   return parser.parse_args()
@@ -43,7 +43,7 @@ def parse_args():
 # scan all the one-row CSV file inside this directory:
 def read_trial_rows(results_dir):
   rows = []
-  fieldnames = None
+  fieldnames = []
 
   # Find every file in result_dir whose name begins with trial_ and ends with .csv
   for path in sorted(results_dir.glob('trial_*.csv')):
@@ -62,8 +62,9 @@ def read_trial_rows(results_dir):
       for row in reader:
         row['source_file'] = str(path) # add one more column
         rows.append(row)
-        if fieldnames is None:
-          fieldnames = list(reader.fieldnames or []) + ['source_file']
+        for fieldname in list(reader.fieldnames or []) + ['source_file']:
+          if fieldname not in fieldnames:
+            fieldnames.append(fieldname)
 
   return rows, fieldnames
 
@@ -77,17 +78,23 @@ def write_combined_csv(rows, fieldnames, combined_csv):
 
 
 def plot_pull_distribution(rows, pull_plot, bins):
-  pulls = []
+  raw_pulls = []
+  det1 = rows[0].get('det1', 'unknown')
+  det2 = rows[0].get('det2', 'unknown')
+  hist_bin_width = rows[0].get('hist_bin_width', 'unknown')
+
   for row in rows:
     try:
-      pull = float(row['pull'])
+      raw_pull = (float(row['best_lag']) - float(row['true_lag'])) * 1000 # convert it into ms unit
     except (KeyError, TypeError, ValueError):
       continue
-    if np.isfinite(pull):
-      pulls.append(pull)
 
-  pulls = np.asarray(pulls, dtype=np.float64)
-  if pulls.size == 0:
+    if np.isfinite(raw_pull):
+      raw_pulls.append(raw_pull)
+
+  raw_pulls = np.asarray(raw_pulls, dtype=np.float64)
+
+  if raw_pulls.size == 0:
     return None
 
   pull_plot.parent.mkdir(parents=True, exist_ok=True)
@@ -96,34 +103,44 @@ def plot_pull_distribution(rows, pull_plot, bins):
   canvas = FigureCanvas(fig)
   ax = fig.add_subplot(111)
 
+  n = raw_pulls.size
   # best-fit parameters of the normal distribution curve:
-  best_fit_mean = float(np.mean(pulls))
-  best_fit_std = float(np.std(pulls, ddof=0))
+  best_fit_mean = float(np.mean(raw_pulls))
+  best_fit_std = float(np.std(raw_pulls, ddof=0))
+
+  best_fit_mean_error = best_fit_std / np.sqrt(n)
+  best_fit_std_error = best_fit_std / np.sqrt(2.0 * n)
 
   # we normalised the histogram area to be = 1 by setting density = True
-  ax.hist(pulls, bins=bins, density=True, edgecolor='black', alpha=0.75, label='Trials')
+  ax.hist(raw_pulls, bins=bins, density=True, edgecolor='black', alpha=0.75, label='Trials')
 
   if best_fit_std > 0.0:
-    x_padding = 0.2 * max(np.ptp(pulls), best_fit_std)
+    x_padding = 0.2 * max(np.ptp(raw_pulls), best_fit_std)
 
-    x = np.linspace(np.min(pulls) - x_padding, np.max(pulls) + x_padding, 500)
+    x = np.linspace(np.min(raw_pulls) - x_padding, np.max(raw_pulls) + x_padding, 500)
 
     normal_distribution = np.exp(-0.5 * ((x - best_fit_mean) / best_fit_std) ** 2) / (best_fit_std * np.sqrt(2.0 * np.pi))
 
-    ax.plot(x, normal_distribution, color='tab:orange', linewidth=5, label='Normal fit: mean = {:.3f}, std = {:.3f}'.format(best_fit_mean, best_fit_std))
+    ax.plot(x, normal_distribution, color='tab:orange', linewidth=5, 
+            label='Normal fit: mean = {:.3f} ± {:.3f}, std = {:.3f} ± {:.3f}'.format(best_fit_mean, 
+                                                                                     best_fit_mean_error, 
+                                                                                     best_fit_std, 
+                                                                                     best_fit_std_error))
 
   ax.axvline(0.0, color='tab:red', linestyle='--', label='zero')
-  ax.set_xlabel('Pull = (best_lag - true_lag) / sigma')
+  ax.set_xlabel('Pull = best_lag - true_lag (ms)')
   ax.set_ylabel('Probability density')
-  ax.set_title('Pull distribution, N = {}'.format(pulls.size))
+  ax.set_title('Pull distribution (N = {}), {} vs {}, bin-width = {}'.format(raw_pulls.size, det1, det2, hist_bin_width))
   ax.legend()
   fig.tight_layout()
   canvas.print_png(pull_plot)
 
   return {
-      'n': int(pulls.size),
+      'n': int(raw_pulls.size),
       'mean': best_fit_mean,
-      'std': float(np.std(pulls, ddof=1)) if pulls.size > 1 else np.nan,
+      'mean_error': best_fit_mean_error,
+      'std': best_fit_std,
+      'std_error': best_fit_std_error
   }
 
 
@@ -142,7 +159,7 @@ def main():
     args.combined_csv = args.run_dir / 'summary.csv'
 
   if args.pull_plot is None:
-    args.pull_plot = args.run_dir / 'pull_distribution.png'
+    args.pull_plot = args.run_dir / 'pull_distribution_raw.png'
 
   rows, fieldnames = read_trial_rows(args.results_dir)
   if not rows:
@@ -155,8 +172,10 @@ def main():
   print('combined csv: {}'.format(args.combined_csv))
   if summary is not None:
     print('pull plot: {}'.format(args.pull_plot))
-    print('pull mean: {:.6f}'.format(summary['mean']))
-    print('pull std: {:.6f}'.format(summary['std']))
+    print('pull mean: {:.6f} ± {:.6f} ms'.format(
+        summary['mean'], summary['mean_error']))
+    print('pull std / RMS: {:.6f} ± {:.6f} ms'.format(
+        summary['std'], summary['std_error']))
 
 
 if __name__ == '__main__':
