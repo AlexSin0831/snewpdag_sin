@@ -1,0 +1,13 @@
+executable = /data/snoplus3/sin2/snewpdag/run_poisson_v5_mc_multiple.sh
+
+arguments = $(Process) 20 --det1 SuperK --det2 SuperK --true-lag 0.022 --hist-bin-width 0.002 --coarse-lag-step 0.005 --fine-lag-step 0.0001 --run-name superk-superk-test1000_lag-0p022_bin-width0p002_fine_v5
+
+output = /data/snoplus3/sin2/snewpdag/logs/poisson_v5_batch20.$(Cluster).$(Process).out
+error  = /data/snoplus3/sin2/snewpdag/logs/poisson_v5_batch20.$(Cluster).$(Process).err
+log    = /data/snoplus3/sin2/snewpdag/logs/poisson_v5_batch20.$(Cluster).log
+
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+
+queue 50
