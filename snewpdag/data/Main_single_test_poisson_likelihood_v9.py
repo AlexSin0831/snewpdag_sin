@@ -12,8 +12,8 @@ PoissonLagLikelihood_v8 ==> Applied interpolation to the lnJ table, with c++ plu
 LikelihoodScanCollector ==> Collect all the likelihoods from different histogram pairs, make a summary
 
 Different error-determination methods: 
-sigma1: second derivative 
-sigma2: 0.5 method 
+sigma1: Fisher Information (second-derivative)
+sigma2: 0.5 method (approximation on Gaussian fisher)
 sigma3: Godambe info (but it is not yet accurate)
 """
 
@@ -85,6 +85,7 @@ DETECTOR_PAIR = ('SuperK','SNOPLUS') # (det1, det2)
 WINDOW_START = -0.6 # early enough such that it can include all the earliest supernova event signal + smoothing
 WINDOW_SIZE = 9.2 # large enough such that it can include all the last supernova event signal + smoothing
 SEED = 1000
+J = np.nan
 
 SMOOTHING = True
 # Generate histogram for IceCube directly --> Speed up the algo A LOT
@@ -281,6 +282,7 @@ def calculations(payload_data,
                  fine_time_lag_step_size,
                  histogram_bin_width,
                  detector_pair,
+                 window_start,
                  window_size,
                  coarse_scan_low,
                  coarse_scan_high,
@@ -396,7 +398,7 @@ def calculations(payload_data,
                                           'ts2',
                                           'hist_pair',
                                           hist_bin_width=histogram_bin_width,
-                                          window_start=WINDOW_START,
+                                          window_start=window_start,
                                           window_size=float(window_size),
                                           lag_field='lag_field',
                                           hist1_ic=HIST1_IC,
@@ -407,7 +409,7 @@ def calculations(payload_data,
                                                          'ts2',
                                                          'hist_pair',
                                                          bin_width=histogram_bin_width,
-                                                         window_start=WINDOW_START,
+                                                         window_start=window_start,
                                                          window_size=float(window_size),
                                                          lag_field='lag_field',
                                                          sigma_gnd=SIGMA_GND,
@@ -421,7 +423,7 @@ def calculations(payload_data,
                                                      'ts2',
                                                      'hist_pair',
                                                      hist_bin_width=histogram_bin_width,
-                                                     window_start=WINDOW_START,
+                                                     window_start=window_start,
                                                      window_size=float(window_size),
                                                      lag_field='lag_field',
                                                      rise_constant=RISE_CONSTANT,
@@ -506,9 +508,7 @@ def format_text_for_filename(value):
   text = re.sub(r'[^A-Za-z0-9._-]+', '-', text)
   return text.strip('-') or 'unknown'
 
-def build_plot_filename(detector_pair, true_lag, coarse_time_lag_step_size,
-                        fine_time_lag_step_size, histogram_bin_width,
-                        window_size, scan_low, scan_high, seed):
+def build_plot_filename(detector_pair, window_size, seed):
   window_size = format_float_for_filename(window_size)
   det1 = format_text_for_filename(detector_pair[0])
   det2 = format_text_for_filename(detector_pair[1])
@@ -609,9 +609,10 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
 
   # Keep using the fine-scan fit curvature to estimate the standard error,
   # but evaluate that curvature at the raw best lag.
-  second_derivative = fit_curve_fine.deriv(2)(best_lag)
-  H = - second_derivative 
-  standard_error_1 = (H) ** (-0.5) if second_derivative <= 0.0 else np.nan
+  second_derivative_obs = fit_curve_fine.deriv(2)(best_lag)
+  H_obs = float(- second_derivative_obs)
+  H_ref = float(- fit_curve_fine.deriv(2)(true_lag))
+  standard_error_1 = H_obs**(-0.5) if np.isfinite(H_obs) and H_obs > 0.0 else np.nan
 
   left_error_bound_1 = best_lag - standard_error_1
   right_error_bound_1 = best_lag + standard_error_1
@@ -645,20 +646,27 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   standard_error_2 = max(right_error_bound_2 - best_lag, best_lag - left_error_bound_2)
 
   # "Godambe" Information: 
-  score = [fit_curve_fine.deriv(1)(x_fit_fine)]
-  J = np.var(score)
-  G = H**2 / J 
-  standard_error_3 = G**(-0.5)
-  left_error_bound_3 = best_lag - standard_error_3 
-  right_error_bound_3 = best_lag + standard_error_3
+  # J = Var(score), and needs to be found by doing Monte Carlo:
+  # score should be computed at the same point for different trials in the Monte Carlo
+  score_ref = float(fit_curve_fine.deriv(1)(true_lag))
+  if np.isfinite(J) and J > 0.0 and H_obs > 0.0: 
+    G = H_obs**2 / J
+    standard_error_3 = G**(-0.5)
+    left_error_bound_3 = best_lag - standard_error_3 
+    right_error_bound_3 = best_lag + standard_error_3
+  else: 
+    G = np.nan 
+    standard_error_3 = np.nan
+    left_error_bound_3 = np.nan
+    right_error_bound_3 = np.nan
 
   print('Plotting Info:')
   print('raw combined-scan best lag: {:.4f} s'.format(best_lag))
   print('standard error from 2nd derivative method: {:.4f} s'.format(standard_error_1))
   print('standard error from 0.5 method: {:.4f} s'.format(standard_error_2))
   print('standard error from Godambe information: {:.4f} s'.format(standard_error_3))
-  print('H_obs (- second derivative): {:.4f}'.format(H))
-  print('J_obs (Variance of slope): {:.4f}'.format(J))
+  print('H_obs (- second derivative): {:.4f}'.format(H_obs))
+  print('score_ref (slope at true-lag): {:.4f}'.format(score_ref))
 
   fig = Figure(figsize=(10, 4))
   canvas = FigureCanvas(fig)
@@ -699,17 +707,17 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
       linewidth=1.2,
       label='0.5 method'
   )
-
-  ax.axvspan(
-    left_error_bound_3,
-    right_error_bound_3, 
-    facecolor='tab:orange',
-    edgecolor='tab:orange',
-    alpha=0.20,
-    linewidth=1.2,
-    label='Godambe Information'
-  )
-
+  if np.isfinite(J) and J > 0.0 and H_obs > 0.0: 
+    ax.axvspan(
+      left_error_bound_3,
+      right_error_bound_3, 
+      facecolor='tab:orange',
+      edgecolor='tab:orange',
+      alpha=0.20,
+      linewidth=1.2,
+      label='Godambe Information'
+    )
+    
   ax.set_xlabel('Time Lag (sec)')
   ax.set_ylabel('ln(L) - ln(L_max)')
 
@@ -743,7 +751,7 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   fig.tight_layout()
   canvas.print_png(filename)
 
-  return best_lag, standard_error_1, standard_error_2, left_error_bound_2, right_error_bound_2, standard_error_3, H, J
+  return best_lag, standard_error_1, standard_error_2, left_error_bound_2, right_error_bound_2, standard_error_3, H_obs, H_ref, score_ref
 
 # use the terminal to change parameters:
 # if no extra parameters are provided in the terminal, then we will just use the default parameters that I have typed inside this file.
@@ -863,7 +871,7 @@ def save_trial_result(args,
                       left_error,
                       right_error,
                       standard_error_3,
-                      H, J):
+                      H_obs, H_ref, score_ref):
 
   args.results_dir.mkdir(parents=True, exist_ok=True)
   result_filename = args.results_dir / build_result_filename(detector_pair, args.seed)
@@ -896,8 +904,9 @@ def save_trial_result(args,
       'left_error': left_error,
       'right_error': right_error,
       'pull3': pull_3,
-      'H': H,
-      'J': J,
+      'H_obs': H_obs,
+      'H_ref': H_ref,
+      'score_ref': score_ref,
       'hist_bin_width': args.hist_bin_width,
       'coarse_lag_step': args.coarse_lag_step,
       'fine_lag_step': args.fine_lag_step,
@@ -968,6 +977,7 @@ def main():
                         args.fine_lag_step,
                         args.hist_bin_width,
                         detector_pair,
+                        args.window_start,
                         args.window_size,
                         args.scan_low,
                         args.scan_high,
@@ -975,16 +985,14 @@ def main():
                         args.toy)
 
   args.output_dir.mkdir(parents=True, exist_ok=True)
-  output_filename = args.output_dir / build_plot_filename(detector_pair, args.true_lag, args.coarse_lag_step,
-                                                        args.fine_lag_step, args.hist_bin_width, args.window_size,
-                                                        args.scan_low, args.scan_high, args.seed)
-    
-  best_lag, standard_error_1, standard_error_2, left_error_bound_2, right_error_bound_2, standard_error_3, H, J = plot_scan_and_find_best_lag(scan_data, args.true_lag, output_filename, detector_pair,
-                                                                                                                  args.hist_bin_width, WINDOW_START, args.window_size, args.smoothing, args.toy)
+  output_filename = args.output_dir / build_plot_filename(detector_pair, args.window_size, args.seed)
+                                                  
+  best_lag, standard_error_1, standard_error_2, left_error_bound_2, right_error_bound_2, standard_error_3, H_obs, H_ref, score_ref = plot_scan_and_find_best_lag(scan_data, args.true_lag, output_filename, detector_pair,
+                                                                                                                  args.hist_bin_width, args.window_start, args.window_size, args.smoothing, args.toy)
 
 
   # Generate a csv file to save stuff!
-  result_filename, pull_1, pull_2 = save_trial_result(args, detector_pair, best_lag, standard_error_1, standard_error_2, output_filename, left_error_bound_2, right_error_bound_2, standard_error_3, H, J)
+  result_filename, pull_1, pull_2 = save_trial_result(args, detector_pair, best_lag, standard_error_1, standard_error_2, output_filename, left_error_bound_2, right_error_bound_2, standard_error_3, H_obs, H_ref, score_ref)
 
   print('---------------------------------------')
   print('Summary:')
