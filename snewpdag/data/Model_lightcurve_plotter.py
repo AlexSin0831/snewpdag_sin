@@ -2,7 +2,7 @@
 Plot one model lightcurve file.
 
 Run from the repository root:
-  python snewpdag/data/plot-model-lightcurve.py
+  python snewpdag/data/Model_lightcurve_plotter.py
 """
 from pathlib import Path
 
