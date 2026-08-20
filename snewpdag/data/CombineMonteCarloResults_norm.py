@@ -13,7 +13,7 @@ from matplotlib.figure import Figure
 
 
 PROJECT_ROOT = Path(__file__).parents[2]
-DEFAULT_MC_DIR = PROJECT_ROOT / 'output' / 'mc_v8'
+DEFAULT_MC_DIR = PROJECT_ROOT / 'output' / 'mc_v9_test'
 
 
 def parse_args():

@@ -1,5 +1,5 @@
 """
-Read all the "SINGLE-ROW" files from each trial, combine them into one table,
+Read all the "SINGLE-ROW" files from each trial, and find the coverage percentage. 
 """
 
 import argparse
@@ -17,17 +17,14 @@ DEFAULT_MC_DIR = PROJECT_ROOT / 'output' / 'mc_v8'
 
 def parse_args():
   parser = argparse.ArgumentParser(
-      description='Combine Monte Carlo trial CSV files and compare pull methods.'
+      description='Combine Monte Carlo trial CSV files and do the coverage test.'
   )
 
   # run-dir is the folder for the entire Monte Carlo campaign 
   parser.add_argument('--run-dir', type=Path, default=None,
                       help='Monte Carlo campaign directory containing results/.')
-  
-  # result-dir is specificially for the subfolder containing the individual trial CSV files
-  parser.add_argument('--results-dir', type=Path, default=None,
-                      help='Directory containing per-trial CSV files.')
 
+  # if the summary csv has already been made: 
   parser.add_argument('--combined-csv', type=Path, default=None,
                       help='Output CSV file containing all trials.')
 
