@@ -81,7 +81,7 @@ SCAN_HIGH = 0.1 # s    # Remove physical wall: 0.042
 COARSE_TIME_LAG_STEP_SIZE = 0.005 # s
 FINE_TIME_LAG_STEP_SIZE = 0.0001 #s
 HISTOGRAM_BIN_WIDTH = 0.002 # s # IceCube default histogram bin-width = 2ms
-DETECTOR_PAIR = ('IceCube','SNOPLUS') # (det1, det2)
+DETECTOR_PAIR = ('SuperK','SNOPLUS') # (det1, det2)
 WINDOW_START = -0.6 # early enough such that it can include all the earliest supernova event signal + smoothing
 WINDOW_SIZE = 9.2 # large enough such that it can include all the last supernova event signal + smoothing
 SEED = 1000
@@ -345,8 +345,8 @@ def calculations(payload_data,
                                                      name='pair_smoothed')
   like_cal = PoissonLagLikelihood('hist_pair',
                                   'likelihood_data',
-                                  sen_1=detector_yield(det1), # unit matters this time, as we are not dealing with ratio anymore.
-                                  sen_2=detector_yield(det2),
+                                  sen_1=detector_yield(det1)/8.69, # unit matters this time, as we are not dealing with ratio anymore.
+                                  sen_2=detector_yield(det2)/8.69,
                                   bg_1=detector_background_rate(det1), # keep per second! 
                                   bg_2=detector_background_rate(det2),
                                   name='like')

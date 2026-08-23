@@ -7,15 +7,21 @@ ops/NewTimeSeries.py ==> Empty Time Series
 gen/GenTimeDist.py ==> Generate realistic Time Series according to models
 gen/GenTimeDist_IceCube.py ==> Generate realistic histogram according to models
 TimeLagGenerator ==> Generate a list of possible time lags
-PairTimeSeriesToHist_Smoothing ==> Apply smoothing function (Convolution) to the time series / histogram
-PairTimeSeriesToHist_Smoothing_Toy ==> Apply smoothing function (Gaussian) to the time series / histogram
-PoissonLagLikelihood_v7 ==> New integration by part approach ; Use bilinear interpolation on the lnJ table ; Use c++ to calculate the lnJ table
+PairTimeSeriesToHist_Smoothing ==> Apply smoothing function to the time series / histogram
+PoissonLagLikelihood_v8 ==> Applied interpolation to the lnJ table, with c++ plugin, and correction term
 LikelihoodScanCollector ==> Collect all the likelihoods from different histogram pairs, make a summary
 
-Uncertainty methods:
-sigma1 ==> Curvature (second-derivative) method
-sigma2 ==> Delta-log-likelihood = 0.5 method
+Different error-determination methods: 
+sigma1: Fisher Information (second-derivative)
+sigma2: 0.5 method (approximation on Gaussian fisher)
+sigma3: Godambe info (can only be calculated after providing the correct J and H)
+
+Analysing the impact of the yield ratio.
+Fixing SuperK yield (7800 / 4000), then let alpha to be the ratio between the yield of det2 / SuperK's
 """
+
+# Fit the inverse polynomial to the 1/I(\sen \lambda + \bg) with respect to \lambda 
+# Introduce the "0.5 method", and compare it with the second-derivative method. 
 
 # Make things more user-friendly on terminal
 import argparse
@@ -45,6 +51,7 @@ def load_plugin(filename):
 def run_node(node, data):
   node.update(data)
   return node.last_data
+# We need to specify the arguments in node as well. 
 # If we don't use run_node, then we will run them in a chained manner
 # .update() --> notify() --> save the output in .last_data
 # Feed the .last_data into the next node
@@ -60,7 +67,7 @@ TimeLagGenerator = load_plugin('TimeLagGenerator.py').TimeLagGenerator
 PairTimeSeriesToHist = load_plugin('PairTimeSeriesToHist.py').PairTimeSeriesToHist
 PairTimeSeriesToHist_Smoothing = load_plugin('PairTimeSeriesToHist_Smoothing.py').PairTimeSeriesToHist_Smoothing
 PairTimeSeriesToHist_Smoothing_Toy = load_plugin('PairTimeSeriesToHist_Smoothing_Toy.py').PairTimeSeriesToHist_Smoothing_Toy
-PoissonLagLikelihood = load_plugin('PoissonLagLikelihood_v7.py').PoissonLagLikelihood_v7
+PoissonLagLikelihood = load_plugin('PoissonLagLikelihood_v8.py').PoissonLagLikelihood_v8
 LikelihoodScanCollector = load_plugin('LikelihoodScanCollector.py').LikelihoodScanCollector
 
 
@@ -68,25 +75,33 @@ LikelihoodScanCollector = load_plugin('LikelihoodScanCollector.py').LikelihoodSc
 PROJECT_ROOT = Path(__file__).parents[2]
 
 OUTPUT_DIRECTORY = PROJECT_ROOT / 'output'
-MC_OUTPUT_DIRECTORY = PROJECT_ROOT / 'output' / 'mc_v7_test'
+MC_OUTPUT_DIRECTORY = PROJECT_ROOT / 'output' / 'mc_v10_test'
 
 # DEFAULT PARAMETERS
-TRUE_LAG = 0.0
-SCAN_LOW = -0.1 # s    # Remove physical wall: -0.042
-SCAN_HIGH = 0.1 # s    # Remove physical wall: 0.042
-COARSE_TIME_LAG_STEP_SIZE = 0.005 # s
-FINE_TIME_LAG_STEP_SIZE = 0.0001 #s
-HISTOGRAM_BIN_WIDTH = 0.002 # s # IceCube default histogram bin-width = 2ms
-DETECTOR_PAIR = ('IceCube', 'LVD') # (det1, det2)
-WINDOW_START = -0.6
-WINDOW_SIZE = 9.2 #s
-SEED = 1001
+TRUE_LAG = 0.022
+SCAN_LOW = -0.1 
+SCAN_HIGH = 0.1 
+COARSE_TIME_LAG_STEP_SIZE = 0.005 
+FINE_TIME_LAG_STEP_SIZE = 0.0001 
+HISTOGRAM_BIN_WIDTH = 0.002 
+WINDOW_START = -0.6 
+WINDOW_SIZE = 9.2 
+SEED = 1000
+
+# DETECTOR RATIO:
+SUPERK_YIELD = 7800 # 4000 if using s-11
+SUPERK_BG = 0.1 
+SUPERK_MODEL_DIREC = str(PROJECT_ROOT / 'models' / 'ibd-s27-nmo-wc.data')
+SUPERK_RESOL = 1e-6
+ALPHA = 0.1 # det2's yield / det1's yield 
+
+# Godambe Information: (which will vary for different detector pairs / other parameters)
+J = np.nan # ms^-2
+H = np.nan # ms^-2
 
 SMOOTHING = True
 # Generate histogram for IceCube directly --> Speed up the algo A LOT
-HIST1_IC = True 
-if DETECTOR_PAIR[0] != 'IceCube': 
-  HIST1_IC = False
+HIST1_IC = False 
 
 # Gaussian Normal Distribution (GND) parameters:
 TOY = True # Use Gaussian as our kernel
@@ -105,59 +120,6 @@ else:
 
 MEAN_CORRECTION = False
 
-DETECTOR_TOTAL_EVENT_SIGNALS = { # per 7 seconds
-  'SuperK': 7800,
-  'JUNO': 7200,
-  'SNOPLUS': 280,
-  'LVD': 360,
-  'IceCube': 660000 # Using full version now
-}
-DETECTOR_BACKGROUND_RATES = { # per 1 second
-  'SuperK': 0.1,
-  'JUNO': 0.0015,
-  'SNOPLUS': 0.001,
-  'LVD': 0.03,
-  'IceCube': 1476000 # Using full version now
-}
-MODEL_DIRECTORY = {
-  'SuperK': str(PROJECT_ROOT / 'models' / 'ibd-s27-nmo-wc.data'),
-  'JUNO': str(PROJECT_ROOT / 'models' / 'ibd-s27-nmo-scint.data'),
-  'SNOPLUS': str(PROJECT_ROOT / 'models' / 'ibd-s27-nmo-scint.data'),
-  'LVD': str(PROJECT_ROOT / 'models' / 'ibd-s27-nmo-scint.data'),
-  'IceCube': str(PROJECT_ROOT / 'models' / 'ibd-s27-nmo-wc.data')
-}
-DETECTOR_RESOLUTION = {
-  'SuperK': 1e-6, #/s
-  'JUNO': 1e-6, #/s
-  'SNOPLUS': 1e-6, #/s
-  'LVD': 1e-6, #/s
-  'IceCube': 1e-6 #/s
-}
-
-# ONLY FOR SAFETY, WHILE RETREIVING THE VALUES:
-def detector_yield(detector_name):
-  if detector_name not in DETECTOR_TOTAL_EVENT_SIGNALS:
-    valid_names = ', '.join(sorted(DETECTOR_TOTAL_EVENT_SIGNALS))
-    raise ValueError(
-      "Unknown detector '{}'. Choose one of: {}".format(detector_name, valid_names)
-    )
-  return DETECTOR_TOTAL_EVENT_SIGNALS[detector_name]
-
-def detector_background_rate(detector_name):
-  if detector_name not in DETECTOR_BACKGROUND_RATES:
-    valid_names = ', '.join(sorted(DETECTOR_BACKGROUND_RATES))
-    raise ValueError(
-      "Unknown detector '{}'. Choose one of: {}".format(detector_name, valid_names)
-    )
-  return DETECTOR_BACKGROUND_RATES[detector_name]
-
-def detector_model_directory(detector_name):
-  if detector_name not in MODEL_DIRECTORY:
-    valid_names = ', '.join(sorted(DETECTOR_BACKGROUND_RATES))
-    raise ValueError(
-      "Unknown detector '{}'. Choose one of: {}".format(detector_name, valid_names)
-    )
-  return MODEL_DIRECTORY[detector_name]
 
 def summary_builder(coarse_data, fine_data):
   """Combine coarse scan and fine scan, prepare the data for plotting the likelihood
@@ -206,11 +168,8 @@ def summary_builder(coarse_data, fine_data):
   }
 
 # build an empty time series --> adding background noise --> adding model lightcurve:
-def build_timeseries(true_lag, detector_pair, model_directory_1, model_directory_2,
-                     background_window_1=(-1.0, 9.0),
-                     background_window_2=(-1.0, 9.0)):
+def build_timeseries(true_lag, det1_yield, det1_bg, alpha, model_directory, background_window_1=(-1.0, 9.0), background_window_2=(-1.0, 9.0)):
 
-  det1, det2 = detector_pair
   bg1_start, bg1_stop = background_window_1
   bg2_start, bg2_stop = background_window_2
 
@@ -227,172 +186,232 @@ def build_timeseries(true_lag, detector_pair, model_directory_1, model_directory
                                     stop_empty,
                                     name = 'new-hist1'), payload_data)
     payload_data = run_node(Uniform('hist1',
-                                    detector_background_rate(det1),
+                                    det1_bg,
                                     bg1_start,
                                     bg1_stop,
                                     name='bg-hist1'), payload_data)
     payload_data = run_node(GenTimeDist_IceCube('hist1',
-                                                sig_filename=model_directory_1,
+                                                sig_filename=model_directory,
                                                 sig_filetype='tn',
                                                 sig_delimiter=',',
-                                                sig_mean=detector_yield(det1),
+                                                sig_mean=det1_yield,
                                                 sig_once=False,
                                                 sig_t0=0.0,
                                                 name='model-hist1'),payload_data)
   else: 
     payload_data = run_node(NewTimeSeries('ts1', name='new-ts1'), payload_data)
     payload_data = run_node(Uniform('ts1',
-                                    detector_background_rate(det1),
+                                    det1_bg,
                                     bg1_start,
                                     bg1_stop,
                                     name='bg-ts1'), payload_data)
     payload_data = run_node(GenTimeDist('ts1',
-                                sig_filename=model_directory_1,
+                                sig_filename=model_directory,
                                 sig_filetype='tn',
                                 sig_delimiter=',',
-                                sig_mean=detector_yield(det1),
+                                sig_mean=det1_yield,
                                 sig_once=False,
                                 sig_t0=0.0,
                                 name='model-ts1'), payload_data)
   
   payload_data = run_node(NewTimeSeries('ts2', name='new-ts2'), payload_data)
   payload_data = run_node(Uniform('ts2',
-                                  detector_background_rate(det2),
+                                  det1_bg,
                                   bg2_start,
                                   bg2_stop,
                                   name='bg-ts2'), payload_data)
   payload_data = run_node(GenTimeDist('ts2',
-                              sig_filename=model_directory_2,
+                              sig_filename=model_directory,
                               sig_filetype='tn',
                               sig_delimiter=',',
-                              sig_mean=detector_yield(det2),
+                              sig_mean=det1_yield * alpha,
                               sig_once=False,
                               sig_t0=true_lag,
                               name='model-ts2'), payload_data)
   return payload_data
 
 # THE MOST IMPORTANT FUNCTION!!!
-def calculations(payload_data,
-                 coarse_time_lag_step_size,
-                 fine_time_lag_step_size,
-                 histogram_bin_width,
-                 detector_pair,
-                 window_size,
-                 coarse_scan_low,
-                 coarse_scan_high,
-                 smoothing,
-                 toy):
+def calculations(payload_data, det1_yield, det1_bg, alpha,
+                 coarse_time_lag_step_size, fine_time_lag_step_size, histogram_bin_width,
+                 window_start, window_size,coarse_scan_low,coarse_scan_high,smoothing,toy):
+    
+    a = det1_yield * histogram_bin_width / 8.69
+    p = alpha * a 
+    b = det1_bg * histogram_bin_width
+    q = b
 
-  det1, det2 = detector_pair
+    # Searching the values of the integral computed by Wolfram Alpha from a csv file:
+    csv_file = Path(__file__).with_name("continuous_poisson_integral.csv")
+    mu_values = []
+    integral_values = []
 
-  # Coarse-scan's lags:
-  payload_data = run_node(TimeLagGenerator('possible_time_lag_list',
-                                  scan_low=coarse_scan_low,
-                                  scan_high=coarse_scan_high,
-                                  step_size=coarse_time_lag_step_size,
-                                  name='possible_time_lag_list'),
-                                  payload_data)
-
-  # Select the histogram builder from the command-line smoothing settings.
-  if not smoothing:
-    histogram_pair = PairTimeSeriesToHist('ts1',
-                                          'ts2',
-                                          'hist_pair',
-                                          hist_bin_width=histogram_bin_width,
-                                          window_start=WINDOW_START,
-                                          window_size=float(window_size),
-                                          lag_field='lag_field',
-                                          hist1_ic=HIST1_IC,
-                                          in_hist1_field='hist1',
-                                          name='pair')
-  elif toy:
-    histogram_pair = PairTimeSeriesToHist_Smoothing_Toy('ts1',
-                                                         'ts2',
-                                                         'hist_pair',
-                                                         bin_width=histogram_bin_width,
-                                                         window_start=WINDOW_START,
-                                                         window_size=float(window_size),
-                                                         lag_field='lag_field',
-                                                         sigma_gnd=SIGMA_GND,
-                                                         impact_range=IMPACT_RANGE,
-                                                         cache_hist1=True,
-                                                         hist1_ic=HIST1_IC,
-                                                         in_hist1_field='hist1',
-                                                         name='pair_smoothed_toy')
-  else:
-    histogram_pair = PairTimeSeriesToHist_Smoothing('ts1',
-                                                     'ts2',
-                                                     'hist_pair',
-                                                     hist_bin_width=histogram_bin_width,
-                                                     window_start=WINDOW_START,
-                                                     window_size=float(window_size),
-                                                     lag_field='lag_field',
-                                                     rise_constant=RISE_CONSTANT,
-                                                     fall_constant=FALL_CONSTANT,
-                                                     sigma1=DETECTOR_RESOLUTION[det1],
-                                                     sigma2=DETECTOR_RESOLUTION[det2],
-                                                     frac_fall=FRAC_FALL,
-                                                     frac_rise=FRAC_RISE,
-                                                     impact_range=IMPACT_RANGE,
-                                                     cache_hist1=True,
-                                                     in_hist1_field='hist1',
-                                                     hist1_ic=HIST1_IC,
-                                                     mean_correction=MEAN_CORRECTION,
-                                                     name='pair_smoothed')
-  like_cal = PoissonLagLikelihood('hist_pair',
-                                  'likelihood_data',
-                                  sen_1=detector_yield(det1)/8.69, # unit matters this time, as we are not dealing with ratio anymore.
-                                  sen_2=detector_yield(det2)/8.69,
-                                  bg_1=detector_background_rate(det1),
-                                  bg_2=detector_background_rate(det2),
-                                  name='like')
-  coarse_collector = LikelihoodScanCollector('likelihood_data',
-                                      'scan',
-                                      scan_type='coarse',
-                                      name='coarse_collector')
-  fine_collector = LikelihoodScanCollector('likelihood_data',
-                                      'scan',
-                                      scan_type='fine',
-                                      name='fine_collector')
+    with csv_file.open() as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                mu_values.append(float(row["mu"]))
+                integral_values.append(float(row["integral"]))
+    
+    mu_values = np.array(mu_values)
+    integral_values = np.array(integral_values)
+    y_values = 1 / integral_values -1 
 
 
-  # True-running for coarse-scan:
-  for lag in payload_data['possible_time_lag_list']:
-    temp_data = payload_data.copy()
-    temp_data['lag_field'] = float(lag)
-    histogram_pair.update(temp_data)
-    like_cal.update(histogram_pair.last_data)
-    coarse_collector.update(like_cal.last_data)
+    lambda1_values = (mu_values - b) / a
+    lambda2_values = (mu_values - q) / p
 
-  # Feed the output from coarse_collector into TimeLagGenerator again.
-  # Fine-scan's lags:
-  fine_payload_data = run_node(TimeLagGenerator('possible_time_lag_list',
-                                                scan_type='fine',
-                                                fine_step=fine_time_lag_step_size,
-                                                in_roi_field='scan/roi',
-                                                name='fine_time_lag_list'),
-                                                coarse_collector.last_data) 
+    # Ignoring the division by zero and invalid operation: 
+    with np.errstate(divide='ignore', invalid='ignore'):
+        x1 = 1 / lambda1_values
+        x2 = 1 / lambda2_values
 
-  # True-running for fine-scan:
-  for lag in fine_payload_data['possible_time_lag_list']:
-    temp_data = fine_payload_data.copy()
-    temp_data['lag_field'] = float(lag)
-    histogram_pair.update(temp_data)
-    like_cal.update(histogram_pair.last_data)
-    fine_collector.update(like_cal.last_data)
+    # Fit 1 / I(a*lambda + b) - 1 = c / lambda.  Only positive
+    # lambda values belong to the physical integration domain.
+    valid_indices_1 = (np.isfinite(x1)
+        & np.isfinite(y_values)
+        & (lambda1_values > 0.0)     
+    )
+    valid_indices_2 = (
+        np.isfinite(x2)
+        & np.isfinite(y_values)
+        & (lambda2_values > 0.0)
+    )
 
-  coarse_scan_data = coarse_collector.last_data['scan']
-  fine_scan_data = fine_collector.last_data['scan']
+    if not np.any(valid_indices_1):
+        raise ValueError('No positive-lambda calibration points are available for det1')
+    if not np.any(valid_indices_2):
+        raise ValueError('No positive-lambda calibration points are available for det2')
 
-  total_scan = summary_builder(coarse_scan_data, fine_scan_data)
+    x1_valid = x1[valid_indices_1]
+    x2_valid = x2[valid_indices_2]
+    y1_values_valid = y_values[valid_indices_1]
+    y2_values_valid = y_values[valid_indices_2]
 
-  # Keep the original scans for plotting/debugging and also return one sorted
-  # table spanning the complete scan range.
-  return {
-      'coarse': coarse_scan_data,
-      'fine': fine_scan_data,
-      'total': total_scan
-  }
+    M1 = np.column_stack([x1_valid])
+    M2 = np.column_stack([x2_valid])
+
+    coeffs1, *_ = np.linalg.lstsq(M1, y1_values_valid, rcond=None)
+    coeffs2, *_ = np.linalg.lstsq(M2, y2_values_valid, rcond=None)
+
+    c1_cal = coeffs1[0]
+    c2_cal = coeffs2[0]
+  
+    print('coefficient of 1/lambda of det1 = {:.4f}'.format(c1_cal))
+    print('coefficient of 1/lambda of det2 = {:.4f}'.format(c2_cal))
+
+    # Coarse-scan's lags:
+    payload_data = run_node(TimeLagGenerator('possible_time_lag_list',
+                                    scan_low=coarse_scan_low,
+                                    scan_high=coarse_scan_high,
+                                    step_size=coarse_time_lag_step_size,
+                                    name='possible_time_lag_list'),
+                                    payload_data)
+
+    # Select the histogram builder from the command-line smoothing settings.
+    if not smoothing:
+        histogram_pair = PairTimeSeriesToHist('ts1',
+                                            'ts2',
+                                            'hist_pair',
+                                            hist_bin_width=histogram_bin_width,
+                                            window_start=window_start,
+                                            window_size=float(window_size),
+                                            lag_field='lag_field',
+                                            hist1_ic=HIST1_IC,
+                                            in_hist1_field='hist1',
+                                            name='pair')
+    elif toy:
+        histogram_pair = PairTimeSeriesToHist_Smoothing_Toy('ts1',
+                                                            'ts2',
+                                                            'hist_pair',
+                                                            bin_width=histogram_bin_width,
+                                                            window_start=window_start,
+                                                            window_size=float(window_size),
+                                                            lag_field='lag_field',
+                                                            sigma_gnd=SIGMA_GND,
+                                                            impact_range=IMPACT_RANGE,
+                                                            cache_hist1=True,
+                                                            hist1_ic=HIST1_IC,
+                                                            in_hist1_field='hist1',
+                                                            name='pair_smoothed_toy')
+    else:
+        histogram_pair = PairTimeSeriesToHist_Smoothing('ts1',
+                                                        'ts2',
+                                                        'hist_pair',
+                                                        hist_bin_width=histogram_bin_width,
+                                                        window_start=window_start,
+                                                        window_size=float(window_size),
+                                                        lag_field='lag_field',
+                                                        rise_constant=RISE_CONSTANT,
+                                                        fall_constant=FALL_CONSTANT,
+                                                        sigma1=SUPERK_RESOL,
+                                                        sigma2=SUPERK_RESOL,
+                                                        frac_fall=FRAC_FALL,
+                                                        frac_rise=FRAC_RISE,
+                                                        impact_range=IMPACT_RANGE,
+                                                        cache_hist1=True,
+                                                        in_hist1_field='hist1',
+                                                        hist1_ic=HIST1_IC,
+                                                        mean_correction=MEAN_CORRECTION,
+                                                        name='pair_smoothed')
+    
+    # new function with correction terms:
+    like_cal = PoissonLagLikelihood('hist_pair',
+                                    'likelihood_data',
+                                    sen_1=det1_yield/8.69, # keep per second
+                                    sen_2=det1_yield/8.69 * alpha,
+                                    bg_1=det1_bg, # keep per second! 
+                                    bg_2=det1_bg,
+                                    cutoff=3.0, 
+                                    c1=c1_cal,
+                                    c2=c2_cal,
+                                    name='like')
+    
+    coarse_collector = LikelihoodScanCollector('likelihood_data',
+                                        'scan',
+                                        scan_type='coarse',
+                                        name='coarse_collector')
+    fine_collector = LikelihoodScanCollector('likelihood_data',
+                                        'scan',
+                                        scan_type='fine',
+                                        name='fine_collector')
+
+
+    # Coarse-scan:
+    for lag in payload_data['possible_time_lag_list']:
+        temp_data = payload_data.copy()
+        temp_data['lag_field'] = float(lag)
+        histogram_pair.update(temp_data)
+        like_cal.update(histogram_pair.last_data)
+        coarse_collector.update(like_cal.last_data)
+
+    # Feed the output from coarse_collector into TimeLagGenerator again.
+    # Fine-scan's lags:
+    fine_payload_data = run_node(TimeLagGenerator('possible_time_lag_list',
+                                                    scan_type='fine',
+                                                    fine_step=fine_time_lag_step_size,
+                                                    in_roi_field='scan/roi',
+                                                    name='fine_time_lag_list'),
+                                                    coarse_collector.last_data) 
+
+    # Fine-scan:
+    for lag in fine_payload_data['possible_time_lag_list']:
+        temp_data = fine_payload_data.copy()
+        temp_data['lag_field'] = float(lag)
+        histogram_pair.update(temp_data)
+        like_cal.update(histogram_pair.last_data)
+        fine_collector.update(like_cal.last_data)
+
+    coarse_scan_data = coarse_collector.last_data['scan']
+    fine_scan_data = fine_collector.last_data['scan']
+
+    total_scan = summary_builder(coarse_scan_data, fine_scan_data)
+
+    # Keep the original scans for plotting/debugging and also return one sorted
+    # table spanning the complete scan range.
+    return {
+        'coarse': coarse_scan_data,
+        'fine': fine_scan_data,
+        'total': total_scan
+    }
 
 # FILE_NAME_MODIFICATION:
 def format_float_for_filename(value):
@@ -403,26 +422,20 @@ def format_text_for_filename(value):
   text = re.sub(r'[^A-Za-z0-9._-]+', '-', text)
   return text.strip('-') or 'unknown'
 
-def build_plot_filename(detector_pair, true_lag, coarse_time_lag_step_size,
-                        fine_time_lag_step_size, histogram_bin_width,
-                        window_size, scan_low, scan_high, seed):
-  window_size = format_float_for_filename(window_size)
-  det1 = format_text_for_filename(detector_pair[0])
-  det2 = format_text_for_filename(detector_pair[1])
+def build_plot_filename(alpha, seed):
+  alpha = format_float_for_filename(alpha)
   return (
     'LogL_against_tau'
-    '_DETS-{}-{}'
+    '_alpha-{}'
     '_seed-{}.png'
-  ).format(det1, det2, seed)
+  ).format(alpha, seed)
 
 # Make our csv files collected in a more systematic way
-def build_run_name(detector_pair, true_lag, coarse_time_lag_step_size,
+def build_run_name(alpha, true_lag, coarse_time_lag_step_size,
                    fine_time_lag_step_size, histogram_bin_width, window_size,
                    scan_low, scan_high):
-  det1 = format_text_for_filename(detector_pair[0])
-  det2 = format_text_for_filename(detector_pair[1])
   return (
-      '{}-{}'
+      'alpha-{}'
       '_true-lag-{}s'
       '_hist-bin-{}s'
       '_coarse-step-{}s'
@@ -430,8 +443,7 @@ def build_run_name(detector_pair, true_lag, coarse_time_lag_step_size,
       '_window-{}s'
       '_scan-{}s-to-{}s'
   ).format(
-      det1,
-      det2,
+      format_float_for_filename(alpha),
       format_float_for_filename(true_lag),
       format_float_for_filename(histogram_bin_width),
       format_float_for_filename(coarse_time_lag_step_size),
@@ -455,41 +467,8 @@ def next_available_path(directory, filename):
       return candidate
     run_number += 1
 
-
-def half_log_likelihood_error_bounds(lags, shifted_log_likelihoods,
-                                     best_index):
-  """Return the scan points bracketing the Delta-log-likelihood = 0.5 region."""
-  lags = np.asarray(lags, dtype=float)
-  shifted_log_likelihoods = np.asarray(shifted_log_likelihoods, dtype=float)
-
-  if lags.ndim != 1 or shifted_log_likelihoods.ndim != 1:
-    raise ValueError('0.5 method requires one-dimensional scan arrays')
-  if lags.size != shifted_log_likelihoods.size:
-    raise ValueError('0.5 method requires matching lag and likelihood arrays')
-  if best_index < 0 or best_index >= lags.size:
-    raise ValueError('0.5 method received an invalid best-lag index')
-
-  left_index = best_index - 1
-  while (left_index >= 0
-         and shifted_log_likelihoods[left_index] > -0.5):
-    left_index -= 1
-
-  right_index = best_index + 1
-  while (right_index < lags.size
-         and shifted_log_likelihoods[right_index] > -0.5):
-    right_index += 1
-
-  if left_index < 0 or right_index >= lags.size:
-    raise ValueError('combined scan does not contain both -0.5 crossings')
-  if (not np.isfinite(shifted_log_likelihoods[left_index])
-      or not np.isfinite(shifted_log_likelihoods[right_index])):
-    raise ValueError('0.5 method crossings must have finite likelihoods')
-
-  return float(lags[left_index]), float(lags[right_index])
-
-
 # LIKELIHOOD PLOT:
-def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
+def plot_scan_and_find_best_lag(scan_data, true_lag, filename, alpha,
                                 histogram_bin_width, window_start, window_size,
                                 smoothing, toy):
   # Retrieving the data:
@@ -499,27 +478,17 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   fine_log_likelihoods = np.asarray(scan_data['fine']['log_likelihood_list'])
   total_lags = np.asarray(scan_data['total']['possible_time_lag_list'])
   total_log_likelihoods = np.asarray(scan_data['total']['log_likelihood_list'])
-  total_sum_lnJs = np.asarray(scan_data['total']['sum_lnJ_list'])
-  total_sum_ln_facs = np.asarray(scan_data['total']['sum_ln_fac_list'])
 
-  sigma_1 = DETECTOR_RESOLUTION[detector_pair[0]]
-  sigma_2 = DETECTOR_RESOLUTION[detector_pair[1]]
-
+  sigma_1 = SUPERK_RESOL
+  sigma_2 = SUPERK_RESOL
 
   if len(total_lags) < 3:
     raise ValueError('combined scan needs at least three points for the likelihood fit')
 
-  # Use one common maximum so the coarse and fine likelihoods are shown on
-  # the same vertical scale.
   log_likelihood_max = np.nanmax(total_log_likelihoods)
-  sum_lnJ_max = np.nanmax(total_sum_lnJs)
-  sum_ln_fac_max = np.nanmax(total_sum_ln_facs)
   shifted_coarse_log_likelihoods = coarse_log_likelihoods - log_likelihood_max
   shifted_fine_log_likelihoods = fine_log_likelihoods - log_likelihood_max
   shifted_total_log_likelihoods = total_log_likelihoods - log_likelihood_max
-  shift_total_sum_lnJs = total_sum_lnJs - sum_lnJ_max
-  shift_total_sum_ln_facs = total_sum_ln_facs - sum_ln_fac_max
-
 
   # Use polynomial to fit the likelihood plot:
   degree_total = min(4, len(total_lags) - 1)
@@ -530,15 +499,6 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   fit_curve_fine = np.polynomial.Polynomial.fit(fine_lags,
                                            shifted_fine_log_likelihoods,
                                            degree_fine)
-  if (not np.all(np.isfinite(total_lags))
-      or not np.all(np.isfinite(shift_total_sum_ln_facs))):
-    raise ValueError('factorial slope fit requires finite lag and ln(n!m!) values')
-
-  # Subtracting a constant maximum changes only the intercept, not the slope
-  # or its standard error.
-  regression = sc.linregress(total_lags, shift_total_sum_ln_facs)
-  slope = regression.slope
-  slope_error = regression.stderr
 
   number_of_grid_total = 1000
   number_of_grid_fine = 100
@@ -547,10 +507,9 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   x_fit_fine = np.linspace(fine_lags.min(), fine_lags.max(), number_of_grid_fine)
   y_fit_total = fit_curve_total(x_fit_total)
   y_fit_fine = fit_curve_fine(x_fit_fine)
-  y_fit_ln_fac = regression.intercept + slope * x_fit_total
 
   # Determine the best lag directly from the largest raw combined-scan
-  # log-likelihood.  The fitted curve is not used to move the best lag.
+  # log-likelihood.  The fitted curve is not used to find the best lag.
   if not np.any(np.isfinite(total_log_likelihoods)):
     raise ValueError('combined scan has no finite log-likelihood values')
 
@@ -559,30 +518,64 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
 
   # Keep using the fine-scan fit curvature to estimate the standard error,
   # but evaluate that curvature at the raw best lag.
-  second_derivative = fit_curve_fine.deriv(2)(best_lag)
-  standard_error_1 = (-second_derivative) ** (-0.5) if second_derivative <= 0.0 else np.nan
+  second_derivative_obs = fit_curve_fine.deriv(2)(best_lag)
+  H_obs = float(- second_derivative_obs)
+  H_ref = float(- fit_curve_fine.deriv(2)(true_lag))
+  standard_error_1 = H_obs**(-0.5) if np.isfinite(H_obs) and H_obs > 0.0 else np.nan
 
   left_error_bound_1 = best_lag - standard_error_1
   right_error_bound_1 = best_lag + standard_error_1
 
-  # Delta-log-likelihood = 0.5 method. Search the combined scan so either
-  # crossing may fall outside the fine-scan interval.
-  left_error_bound_2, right_error_bound_2 = half_log_likelihood_error_bounds(
-      total_lags, shifted_total_log_likelihoods, best_total_index)
 
-  # Use one conservative symmetric value for pulls while retaining the
-  # asymmetric left/right bounds for coverage calculations.
-  standard_error_2 = max(right_error_bound_2 - best_lag,
-                         best_lag - left_error_bound_2)
+  # "0.5 Method" on the combined scan.  This allows a crossing to fall
+  # outside the fine-scan interval and continue into the coarse scan.
+  left_index = best_total_index - 1
+  right_index = best_total_index + 1
+
+  while left_index >= 0:
+    if shifted_total_log_likelihoods[left_index] > -0.5: 
+      left_index -= 1
+    else: 
+      break 
+  
+  while right_index < np.size(total_lags):
+    if shifted_total_log_likelihoods[right_index] > -0.5:
+      right_index += 1 
+    else: 
+      break 
+
+  if left_index < 0 or right_index >= np.size(total_lags):
+    raise ValueError('combined scan does not contain both -0.5 crossings')
+
+  # for coverage, we will use this as the 1-sigma region:
+  left_error_bound_2 = total_lags[left_index]
+  right_error_bound_2 = total_lags[right_index]
+
+  # for pulls, we will use this (assume Gaussian <==> Symmetrical)
+  standard_error_2 = max(right_error_bound_2 - best_lag, best_lag - left_error_bound_2)
+
+  # "Godambe" Information: 
+  # J = Var(score), and needs to be found by doing Monte Carlo:
+  # score should be computed at the same point for different trials in the Monte Carlo
+  score_ref = float(fit_curve_fine.deriv(1)(true_lag))
+  if np.isfinite(J) and J > 0.0 and np.isfinite(H) and H > 0.0: 
+    godambe = (H**2 / J) * 1000**2 # back to second 
+    standard_error_3 = godambe**(-0.5) # back to second
+    left_error_bound_3 = best_lag - standard_error_3 
+    right_error_bound_3 = best_lag + standard_error_3
+  else: 
+    godambe = np.nan 
+    standard_error_3 = np.nan
+    left_error_bound_3 = np.nan
+    right_error_bound_3 = np.nan
 
   print('Plotting Info:')
   print('raw combined-scan best lag: {:.4f} s'.format(best_lag))
-  print('standard error from 2nd derivative method: {:.4f} s'.format(
-      standard_error_1))
-  print('standard error from 0.5 method: {:.4f} s'.format(
-      standard_error_2))
-  print('slope of ln(n!m!) = {:.4g} ± {:.2g} s^-1'.format(
-      slope, slope_error))
+  print('standard error from 2nd derivative method: {:.4f} s'.format(standard_error_1))
+  print('standard error from 0.5 method: {:.4f} s'.format(standard_error_2))
+  print('standard error from Godambe information: {:.4f} s'.format(standard_error_3))
+  print('H_obs (- second derivative): {:.4f}'.format(H_obs))
+  print('score_ref (slope at true-lag): {:.4f}'.format(score_ref))
 
   fig = Figure(figsize=(10, 4))
   canvas = FigureCanvas(fig)
@@ -597,44 +590,51 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
           label='{}-deg full-scan fit'.format(degree_total))
   ax.plot(x_fit_fine, y_fit_fine, color='tab:green', linestyle='-', linewidth = 1.0,
           label='{}-deg fine-scan fit'.format(degree_fine))
-  ax.plot(total_lags, shift_total_sum_lnJs, marker = 'o', linestyle = 'None', markersize = 2, 
-          color = 'black', label = 'sum_lnJ - sum_lnJ_max')
-  ax.plot(total_lags, shift_total_sum_ln_facs, marker = 'o', linestyle = 'None', markersize = 2,
-          color = 'tab:purple', label = 'sum_ln_fac - sum_ln_fac_max')
-  ax.plot(x_fit_total, y_fit_ln_fac, color='tab:purple', linestyle='--',
-          linewidth=1.0,
-          label='ln(n!m!) slope = {:.4g} ± {:.2g} s$^{{-1}}$'.format(
-              slope, slope_error))
   ax.axvline(true_lag, color='tab:cyan', linestyle='--', linewidth = 2.5, label='true lag')
   ax.axvline(best_lag, color='tab:red', linestyle=':', linewidth = 2.5,
              label='raw combined-scan best lag')
-  ax.axhline(-0.5, color='tab:blue', linestyle='--', linewidth=1.0,
-             label=r'$\Delta\ln(L)=-0.5$')
 
-  # Show both uncertainty determinations.
-  ax.axvspan(left_error_bound_1,
-             right_error_bound_1,
-             facecolor='tab:green',
-             edgecolor='tab:green',
-             alpha=0.20,
-             linewidth=1.2,
-             label='Second-derivative method')
-  ax.axvspan(left_error_bound_2,
-             right_error_bound_2,
-             facecolor='none',
-             edgecolor='tab:blue',
-             hatch='\\\\',
-             linewidth=1.2,
-             label='0.5 method')
+  # shading the 1-sigma region, just for better visualisation:
+  # Second-derivative region
+  ax.axvspan(
+    left_error_bound_1,
+    right_error_bound_1,
+    facecolor='tab:green',
+    edgecolor='tab:green',
+    alpha=0.20,
+    linewidth=1.2,
+    label='Second-derivative method'
+)
 
+# 0.5-method region
+  ax.axvspan(
+      left_error_bound_2,
+      right_error_bound_2,
+      facecolor='none',
+      edgecolor='tab:blue',
+      hatch='\\\\',
+      linewidth=1.2,
+      label='0.5 method'
+  )
+  if np.isfinite(J) and J > 0.0 and np.isfinite(H) and H > 0.0: 
+    ax.axvspan(
+      left_error_bound_3,
+      right_error_bound_3, 
+      facecolor='tab:orange',
+      edgecolor='tab:orange',
+      alpha=0.20,
+      linewidth=1.2,
+      label='Godambe Information'
+    )
+    
   ax.set_xlabel('Time Lag (sec)')
   ax.set_ylabel('ln(L) - ln(L_max)')
 
   window_stop = window_start + window_size
   title_prefix = (
-      '{} vs {}, binwidth={} s, window=[{:.3f}, {:.3f}] s'.format(
-          detector_pair[0], detector_pair[1], histogram_bin_width,
-          window_start, window_stop)
+      'alpha = {}, binwidth={} s, window=[{:.3f}, {:.3f}] s'.format(
+          alpha, histogram_bin_width, window_start, window_stop)
+          
   )
 
   if not smoothing:
@@ -660,8 +660,7 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   fig.tight_layout()
   canvas.print_png(filename)
 
-  return (best_lag, standard_error_1, standard_error_2,
-          left_error_bound_2, right_error_bound_2)
+  return best_lag, standard_error_1, standard_error_2, left_error_bound_2, right_error_bound_2, standard_error_3, H_obs, H_ref, score_ref
 
 # use the terminal to change parameters:
 # if no extra parameters are provided in the terminal, then we will just use the default parameters that I have typed inside this file.
@@ -675,17 +674,13 @@ def add_boolean_argument(parser, name, default, help_text):
                      help='Disable: ' + help_text)
   parser.set_defaults(**{dest: default})
 
-
 def parse_args():
   parser = argparse.ArgumentParser(
     description='Run a Poisson likelihood scan for one detector pair.'
   )
-  parser.add_argument('--det1', default=DETECTOR_PAIR[0],
-                      choices=sorted(DETECTOR_TOTAL_EVENT_SIGNALS),
-                      help='First detector name.')
-  parser.add_argument('--det2', default=DETECTOR_PAIR[1],
-                      choices=sorted(DETECTOR_TOTAL_EVENT_SIGNALS),
-                      help='Second detector name.')
+  parser.add_argument('--superk_yield', type=float, default=SUPERK_YIELD, help='The estimated yield of SuperK in 8.69 seconds')
+  parser.add_argument('--superk_bg', type=float, default=SUPERK_BG, help='Background rate of SuperK per second')
+  parser.add_argument('--alpha', type=float, default=ALPHA, help='Ratio of det2 yield / superk yield')                    
   parser.add_argument('--true-lag', type=float, default=TRUE_LAG,
                       help='True time lag in seconds.')
   parser.add_argument('--scan-low', type=float, default=SCAN_LOW,
@@ -704,13 +699,15 @@ def parse_args():
                       help='Histogram time window start in seconds.')
   parser.add_argument('--seed', type=int, default=SEED,
                       help='Random seed for reproducible generated events.')
+  parser.add_argument('--model_directory', type=str, default=SUPERK_MODEL_DIREC,
+                      help='Model directory that you want to use.')
   smoothing = parser.add_argument_group('smoothing')
   add_boolean_argument(
       smoothing, 'smoothing', SMOOTHING,
       'Apply smoothing when building histogram pairs.'
   )
   add_boolean_argument(
-      smoothing, 'hist1-ic', None,
+      smoothing, 'hist1-ic', HIST1_IC, 
       'Generate detector 1 directly as a histogram. By default this is '
       'enabled when --det1 is IceCube.'
   )
@@ -742,20 +739,11 @@ def parse_args():
                       help='Directory for one-row Monte Carlo result CSV files.')
   return parser.parse_args()
 
-
 def apply_smoothing_args(args):
   """Make parsed smoothing settings available to the workflow functions."""
   global HIST1_IC, SMOOTHING, TOY, SIGMA_GND
   global RISE_CONSTANT, FALL_CONSTANT, FRAC_RISE, FRAC_FALL
   global IMPACT_RANGE, MEAN_CORRECTION
-
-  # Only IceCube may use the direct-histogram generation path.  Normalize this
-  # after parsing so an explicit --hist1-ic cannot enable it for another
-  # detector; --no-hist1-ic remains available for IceCube when needed.
-  if args.det1 != 'IceCube':
-    args.hist1_ic = False
-  elif args.hist1_ic is None:
-    args.hist1_ic = True
 
   HIST1_IC = args.hist1_ic
   SMOOTHING = args.smoothing
@@ -768,24 +756,22 @@ def apply_smoothing_args(args):
   IMPACT_RANGE = args.impact_range
   MEAN_CORRECTION = args.mean_correction
 
-
-def build_result_filename(detector_pair, seed):
-  det1 = format_text_for_filename(detector_pair[0])
-  det2 = format_text_for_filename(detector_pair[1])
-  return 'trial_{}_{}_seed-{}.csv'.format(det1, det2, seed)
+def build_result_filename(alpha, seed):
+  return 'trial_alpha-{}_seed-{}.csv'.format(alpha, seed)
 
 # Systematic place to save our result:
 def save_trial_result(args,
-                      detector_pair,
                       best_lag,
                       standard_error_1,
                       standard_error_2,
                       output_filename,
                       left_error,
-                      right_error):
+                      right_error,
+                      standard_error_3,
+                      H_obs, H_ref, score_ref):
 
   args.results_dir.mkdir(parents=True, exist_ok=True)
-  result_filename = args.results_dir / build_result_filename(detector_pair, args.seed)
+  result_filename = args.results_dir / build_result_filename(args.alpha, args.seed)
 
   if standard_error_1 > 0.0 and np.isfinite(standard_error_1):
     pull_1 = (best_lag - args.true_lag) / standard_error_1
@@ -797,21 +783,27 @@ def save_trial_result(args,
   else:
     pull_2 = np.nan
 
+  if standard_error_3 > 0.0 and np.isfinite(standard_error_3):
+    pull_3 = (best_lag - args.true_lag) / standard_error_3
+  else:
+    pull_3 = np.nan
+
   row = {
       'seed': args.seed,
-      'det1': detector_pair[0],
-      'det2': detector_pair[1],
+      'alpha': args.alpha,
       'true_lag': args.true_lag,
       'best_lag': best_lag,
-      # Keep the original names as aliases for existing v7 consumers.
-      'sigma': standard_error_1,
-      'pull': pull_1,
       'sigma1': standard_error_1,
       'sigma2': standard_error_2,
       'pull1': pull_1,
       'pull2': pull_2,
       'left_error': left_error,
       'right_error': right_error,
+      'sigma3':standard_error_3,
+      'pull3': pull_3,
+      'H_obs': H_obs,
+      'H_ref': H_ref,
+      'score_ref': score_ref,
       'hist_bin_width': args.hist_bin_width,
       'coarse_lag_step': args.coarse_lag_step,
       'fine_lag_step': args.fine_lag_step,
@@ -842,11 +834,10 @@ def save_trial_result(args,
 def main():
   args = parse_args()
   apply_smoothing_args(args)
-  detector_pair = (args.det1, args.det2)
   run_name = args.run_name
   if run_name is None:
     run_name = build_run_name(
-        detector_pair,
+        args.alpha,
         args.true_lag,
         args.coarse_lag_step,
         args.fine_lag_step,
@@ -859,8 +850,7 @@ def main():
   # Specify our run_directory in terms of our parameters
   run_dir = MC_OUTPUT_DIRECTORY / format_text_for_filename(run_name)
 
-  model1 = detector_model_directory(args.det1)
-  model2 = detector_model_directory(args.det2)
+  model_directory = args.model_directory
 
   # The sub-folder that stores all the likelihood plots
   if args.output_dir is None:
@@ -872,45 +862,44 @@ def main():
 
   Node.rng = np.random.default_rng(args.seed)
 
-  data = build_timeseries(args.true_lag, detector_pair, model1, model2,
+  data = build_timeseries(args.true_lag, args.superk_yield, args.superk_bg, 
+                          args.alpha, model_directory,
                           background_window_1=(-1.0,9.0),
                           background_window_2=(-1.0,9.0))
 
   # Be careful, that now scan_data is a dictionary, saving scanning data of coarse, fine and total scan.
-  scan_data = calculations(
-    data,
-    args.coarse_lag_step,
-    args.fine_lag_step,
-    args.hist_bin_width,
-    detector_pair,
-    args.window_size,
-    args.scan_low,
-    args.scan_high,
-    args.smoothing,
-    args.toy
-  )
+  scan_data = calculations(data, args.superk_yield, args.superk_bg, args.alpha,
+                        args.coarse_lag_step,
+                        args.fine_lag_step,
+                        args.hist_bin_width,
+                        args.window_start,
+                        args.window_size,
+                        args.scan_low,
+                        args.scan_high,
+                        args.smoothing,
+                        args.toy)
 
   args.output_dir.mkdir(parents=True, exist_ok=True)
-  output_filename = args.output_dir / build_plot_filename(
-    detector_pair, args.true_lag, args.coarse_lag_step,
-    args.fine_lag_step, args.hist_bin_width, args.window_size,
-    args.scan_low, args.scan_high, args.seed
-  )
-  (best_lag, standard_error_1, standard_error_2,
-   left_error_bound_2, right_error_bound_2) = plot_scan_and_find_best_lag(
-      scan_data, args.true_lag, output_filename, detector_pair,
-      args.hist_bin_width, WINDOW_START, args.window_size,
-      args.smoothing, args.toy)
+  output_filename = args.output_dir / build_plot_filename(args.alpha, args.seed)
+                                                  
+  best_lag, standard_error_1, standard_error_2, left_error_bound, right_error_bound, standard_error_3, H_obs, H_ref, score_ref = plot_scan_and_find_best_lag(scan_data, 
+                                                                                                                                                                 args.true_lag, 
+                                                                                                                                                                 output_filename, 
+                                                                                                                                                                 args.alpha, 
+                                                                                                                                                                 args.hist_bin_width, 
+                                                                                                                                                                 args.window_start, 
+                                                                                                                                                                 args.window_size, 
+                                                                                                                                                                 args.smoothing, 
+                                                                                                                                                                 args.toy)
+                                                                                                                  
 
 
   # Generate a csv file to save stuff!
-  result_filename, pull_1, pull_2 = save_trial_result(
-      args, detector_pair, best_lag, standard_error_1, standard_error_2,
-      output_filename, left_error_bound_2, right_error_bound_2)
+  result_filename, pull_1, pull_2 = save_trial_result(args, best_lag, standard_error_1, standard_error_2, output_filename, left_error_bound, right_error_bound, standard_error_3, H_obs, H_ref, score_ref)
 
   print('---------------------------------------')
   print('Summary:')
-  print('detectors: {} and {}'.format(detector_pair[0], detector_pair[1]))
+  print('alpha = {}'.format(args.alpha))
   print('histogram bin width: {:.6f} s'.format(args.hist_bin_width))
   print('coarse time lag step size: {:.6f} s'.format(args.coarse_lag_step))
   print('fine time lag step size: {:.6f} s'.format(args.fine_lag_step))

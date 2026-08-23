@@ -147,7 +147,8 @@ class PoissonLagLikelihood_v8(Node):
 
         log_correction = 0.0
 
-        apply_correction = not (n < self.cutoff and m < self.cutoff)
+        # Correct whenever either detector is in the low-count regime.
+        apply_correction = n < self.cutoff or m < self.cutoff
 
         if apply_correction and k1 > 0.0:
             x = n + m - 1.0

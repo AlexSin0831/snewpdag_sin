@@ -14,7 +14,7 @@ LikelihoodScanCollector ==> Collect all the likelihoods from different histogram
 Different error-determination methods: 
 sigma1: Fisher Information (second-derivative)
 sigma2: 0.5 method (approximation on Gaussian fisher)
-sigma3: Godambe info (but it is not yet accurate)
+sigma3: Godambe info (can only be calculated after providing the correct J and H)
 """
 
 # Fit the inverse polynomial to the 1/I(\sen \lambda + \bg) with respect to \lambda 
@@ -85,7 +85,10 @@ DETECTOR_PAIR = ('SuperK','SNOPLUS') # (det1, det2)
 WINDOW_START = -0.6 # early enough such that it can include all the earliest supernova event signal + smoothing
 WINDOW_SIZE = 9.2 # large enough such that it can include all the last supernova event signal + smoothing
 SEED = 1000
-J = np.nan
+
+# Godambe Information: (which will vary for different detector pairs / other parameters)
+J = np.nan # ms^-2
+H = np.nan # ms^-2
 
 SMOOTHING = True
 # Generate histogram for IceCube directly --> Speed up the algo A LOT
@@ -103,11 +106,8 @@ RISE_CONSTANT = 0.02
 FALL_CONSTANT = 2.0
 FRAC_RISE = 0.8
 FRAC_FALL = 0.2
-if TOY == True: 
-  IMPACT_RANGE = SIGMA_GND * 5.0 
-else: 
-  IMPACT_RANGE = 2.0
 
+IMPACT_RANGE = SIGMA_GND * 5.0 
 MEAN_CORRECTION = False
 
 DETECTOR_TOTAL_EVENT_SIGNALS = { # per 8.69 seconds
@@ -291,10 +291,11 @@ def calculations(payload_data,
 
   det1, det2 = detector_pair
   
-  sen1 = detector_yield(det1) * histogram_bin_width
-  sen2 = detector_yield(det2) * histogram_bin_width
-  bg1 = detector_background_rate(det1) * histogram_bin_width
-  bg2 = detector_background_rate(det2) * histogram_bin_width
+  # forgot to use the values relative to the bin-width...
+  a = detector_yield(det1) * histogram_bin_width / 8.69
+  p = detector_yield(det2) * histogram_bin_width / 8.69
+  b = detector_background_rate(det1) * histogram_bin_width 
+  q = detector_background_rate(det2) * histogram_bin_width
 
   # Searching the values of the integral computed by Wolfram Alpha from a csv file:
   csv_file = Path(__file__).with_name("continuous_poisson_integral.csv")
@@ -311,10 +312,10 @@ def calculations(payload_data,
   y_values = 1 / integral_values -1 
 
   if det1 != 'IceCube':
-    lambda1_values = (mu_values - bg1) / sen1
-    lambda2_values = (mu_values - bg2) / sen2
+    lambda1_values = (mu_values - b) / a
+    lambda2_values = (mu_values - q) / p
     
-    # fitting with the inverse!
+    # Ignoring the division by zero and invalid operation: 
     with np.errstate(divide='ignore', invalid='ignore'):
       x1 = 1 / lambda1_values
       x2 = 1 / lambda2_values
@@ -358,9 +359,9 @@ def calculations(payload_data,
     # background rate is large, so we can approximate 1/I(a\lambda+b) = 1 for IceCube.
     c1_cal = 0 
 
-    lambda2_values = (mu_values - bg2) / sen2
+    lambda2_values = (mu_values - q) / p
     
-    # fitting with the inverse!
+    # Ignoring the division by zero and invalid operation: 
     with np.errstate(divide='ignore', invalid='ignore'):
       x2 = 1 / lambda2_values
 
@@ -402,7 +403,7 @@ def calculations(payload_data,
                                           window_size=float(window_size),
                                           lag_field='lag_field',
                                           hist1_ic=HIST1_IC,
-                                          in_hist1_field='hist1',
+                                          in_hist1_field='hist1', # IceCube's Histogram
                                           name='pair')
   elif toy:
     histogram_pair = PairTimeSeriesToHist_Smoothing_Toy('ts1',
@@ -416,7 +417,7 @@ def calculations(payload_data,
                                                          impact_range=IMPACT_RANGE,
                                                          cache_hist1=True,
                                                          hist1_ic=HIST1_IC,
-                                                         in_hist1_field='hist1',
+                                                         in_hist1_field='hist1', # IceCube's Histogram
                                                          name='pair_smoothed_toy')
   else:
     histogram_pair = PairTimeSeriesToHist_Smoothing('ts1',
@@ -442,8 +443,8 @@ def calculations(payload_data,
   # new function with correction terms:
   like_cal = PoissonLagLikelihood('hist_pair',
                                   'likelihood_data',
-                                  sen_1=detector_yield(det1), # unit matters this time, as we are not dealing with ratio anymore.
-                                  sen_2=detector_yield(det2),
+                                  sen_1=detector_yield(det1)/8.69, # unit matters this time, as we are not dealing with ratio anymore.
+                                  sen_2=detector_yield(det2)/8.69,
                                   bg_1=detector_background_rate(det1), # keep per second! 
                                   bg_2=detector_background_rate(det2),
                                   cutoff=3.0, 
@@ -649,13 +650,13 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   # J = Var(score), and needs to be found by doing Monte Carlo:
   # score should be computed at the same point for different trials in the Monte Carlo
   score_ref = float(fit_curve_fine.deriv(1)(true_lag))
-  if np.isfinite(J) and J > 0.0 and H_obs > 0.0: 
-    G = H_obs**2 / J
-    standard_error_3 = G**(-0.5)
+  if np.isfinite(J) and J > 0.0 and np.isfinite(H) and H > 0.0: 
+    godambe = (H**2 / J) * 1000**2 # back to second 
+    standard_error_3 = godambe**(-0.5) # back to second
     left_error_bound_3 = best_lag - standard_error_3 
     right_error_bound_3 = best_lag + standard_error_3
   else: 
-    G = np.nan 
+    godambe = np.nan 
     standard_error_3 = np.nan
     left_error_bound_3 = np.nan
     right_error_bound_3 = np.nan
@@ -707,7 +708,7 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
       linewidth=1.2,
       label='0.5 method'
   )
-  if np.isfinite(J) and J > 0.0 and H_obs > 0.0: 
+  if np.isfinite(J) and J > 0.0 and np.isfinite(H) and H > 0.0: 
     ax.axvspan(
       left_error_bound_3,
       right_error_bound_3, 
@@ -903,6 +904,7 @@ def save_trial_result(args,
       'pull2': pull_2,
       'left_error': left_error,
       'right_error': right_error,
+      'sigma3':standard_error_3,
       'pull3': pull_3,
       'H_obs': H_obs,
       'H_ref': H_ref,
