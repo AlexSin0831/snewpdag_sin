@@ -1,0 +1,30 @@
+project_root = /data/snoplus3/sin2/snewpdag-clean
+initialdir = $(project_root)
+executable = $(project_root)/bash/run_parameter_analysis.sh
+
+arguments = $(Process) 5 \
+  --superk_yield 7800 \
+  --superk_bg 0.1 \
+  --alpha 0.1 \
+  --true-lag 0.022 \
+  --hist-bin-width 0.002 \
+  --window-size 9.2 \
+  --window-start -0.6 \
+  --coarse-lag-step 0.005 \
+  --fine-lag-step 0.0001 \
+  --hist1-ic \
+  --smoothing \
+  --toy \
+  --sigma-gnd 0.01 \
+  --impact-range 0.05 \
+  --run-name alpha-0p1-sigma-gnd-0p01
+
+output = $(project_root)/logs/parameter_batch5.$(Cluster).$(Process).out
+error  = $(project_root)/logs/parameter_batch5.$(Cluster).$(Process).err
+log    = $(project_root)/logs/parameter_batch5.$(Cluster).log
+
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+
+queue 200
