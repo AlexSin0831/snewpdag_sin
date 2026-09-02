@@ -59,10 +59,10 @@ MC_OUTPUT_DIRECTORY = PROJECT_ROOT / 'output' / 'mc_v4'
 TRUE_LAG = 0.022
 SCAN_LOW = -0.1 # s
 SCAN_HIGH = 0.1 # s
-COARSE_TIME_LAG_STEP_SIZE = 0.001 # s
+COARSE_TIME_LAG_STEP_SIZE = 0.005 # s
 FINE_TIME_LAG_STEP_SIZE = 0.0001 #s
 HISTOGRAM_BIN_WIDTH = 0.002 # s # IceCube default histogram bin-width = 2ms
-DETECTOR_PAIR = ('SuperK', 'SNOPLUS') # (det1, det2)
+DETECTOR_PAIR = ('IceCube', 'SuperK') # (det1, det2)
 WINDOW_SIZE = 2.0 #s 
 SEED = 1000
 

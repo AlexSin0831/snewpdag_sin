@@ -87,8 +87,8 @@ WINDOW_SIZE = 9.2 # large enough such that it can include all the last supernova
 SEED = 1000
 
 # Godambe Information: (which will vary for different detector pairs / other parameters)
-J = np.nan # ms^-2
-H = np.nan # ms^-2
+J = np.nan # s^-2
+H = np.nan # s^-2
 
 SMOOTHING = True
 # Generate histogram for IceCube directly --> Speed up the algo A LOT
@@ -99,7 +99,7 @@ if DETECTOR_PAIR[0] != 'IceCube':
 # Gaussian Normal Distribution (GND) parameters:
 TOY = True # Use Gaussian as our kernel
 # around 5ms to 15 ms is a good choice to catch up the rising edge
-SIGMA_GND = 0.005 # second 
+SIGMA_GND = 0.02 # second 
 
 # Convolution Smoothing parameters:
 RISE_CONSTANT = 0.02
@@ -118,8 +118,8 @@ DETECTOR_TOTAL_EVENT_SIGNALS = { # per 8.69 seconds
   'IceCube': 660000 
 }
 DETECTOR_BACKGROUND_RATES = { # per 1 second
-  'SuperK': 0.1,
-  'JUNO': 0.0015,
+  'SuperK': 0.1, 
+  'JUNO': 0.0015, 
   'SNOPLUS': 0.001,
   'LVD': 0.03,
   'IceCube': 1476000 
@@ -448,6 +448,7 @@ def calculations(payload_data,
                                   bg_1=detector_background_rate(det1), # keep per second! 
                                   bg_2=detector_background_rate(det2),
                                   cutoff=3.0, 
+                                  correction=False,
                                   c1=c1_cal,
                                   c2=c2_cal,
                                   name='like')
@@ -651,8 +652,8 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   # score should be computed at the same point for different trials in the Monte Carlo
   score_ref = float(fit_curve_fine.deriv(1)(true_lag))
   if np.isfinite(J) and J > 0.0 and np.isfinite(H) and H > 0.0: 
-    godambe = (H**2 / J) * 1000**2 # back to second 
-    standard_error_3 = godambe**(-0.5) # back to second
+    godambe = H**2 / J # s^-2
+    standard_error_3 = godambe**(-0.5) # s
     left_error_bound_3 = best_lag - standard_error_3 
     right_error_bound_3 = best_lag + standard_error_3
   else: 
@@ -666,8 +667,8 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
   print('standard error from 2nd derivative method: {:.4f} s'.format(standard_error_1))
   print('standard error from 0.5 method: {:.4f} s'.format(standard_error_2))
   print('standard error from Godambe information: {:.4f} s'.format(standard_error_3))
-  print('H_obs (- second derivative): {:.4f}'.format(H_obs))
-  print('score_ref (slope at true-lag): {:.4f}'.format(score_ref))
+  print('H_ref (- second derivative): {:.4f} s^-2'.format(H_ref))
+  print('score_ref (slope at true-lag): {:.4f} s^-1'.format(score_ref))
 
   fig = Figure(figsize=(10, 4))
   canvas = FigureCanvas(fig)
@@ -680,7 +681,7 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
           color='tab:red', label='fine scan')
   ax.plot(x_fit_total, y_fit_total, color='tab:orange', linestyle='-', linewidth = 1.0,
           label='{}-deg full-scan fit'.format(degree_total))
-  ax.plot(x_fit_fine, y_fit_fine, color='tab:green', linestyle='-', linewidth = 1.0,
+  ax.plot(x_fit_fine, y_fit_fine, color='tab:green', linestyle='-', linewidth = 2.0,
           label='{}-deg fine-scan fit'.format(degree_fine))
   ax.axvline(true_lag, color='tab:cyan', linestyle='--', linewidth = 2.5, label='true lag')
   ax.axvline(best_lag, color='tab:red', linestyle=':', linewidth = 2.5,
@@ -708,6 +709,8 @@ def plot_scan_and_find_best_lag(scan_data, true_lag, filename, detector_pair,
       linewidth=1.2,
       label='0.5 method'
   )
+
+  # Godambe error:
   if np.isfinite(J) and J > 0.0 and np.isfinite(H) and H > 0.0: 
     ax.axvspan(
       left_error_bound_3,

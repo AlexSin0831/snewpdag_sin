@@ -22,6 +22,6 @@ with csv_file.open() as file:
 plt.plot(mu_values, integral_values, marker="o")
 plt.xlabel("mu")
 plt.ylabel("I(mu)")
-plt.title("Continuous Poisson integral")
+plt.title("Normalisation integral calculated by Wolfram Alpha")
 plt.grid()
 plt.show()

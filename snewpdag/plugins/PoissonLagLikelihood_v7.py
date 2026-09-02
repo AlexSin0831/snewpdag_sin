@@ -1,4 +1,5 @@
 """
+This is the one we will be using! (without correction)
 PoissonLagLikelihood_v7           : Calculate the Poisson likelihood of a histogram pair corresponding to a certain time lag.
                                     Expect to have FLOAT values in the histograms due to the smoothing. 
                                     Therefore, we used interpolation to estimate the values of lnJ(n,m), where n and m are floats.
@@ -45,7 +46,7 @@ class PoissonLagLikelihood_v7(Node):
     super().__init__(**kwargs)
 
   def retrieve_lnJ_table(self, nmax, mmax, a, b, p, q):
-    # Table's key:
+    # Table's key: (detector pair's parameters)
     key = (float(a), float(b), float(p), float(q))
     table = self.lnJ_table_cache.get(key)
     
@@ -144,12 +145,15 @@ class PoissonLagLikelihood_v7(Node):
       pair = hist_data
     elif 'pairs' in hist_data and len(hist_data['pairs']) == 1:
       pair = hist_data['pairs'][0]
-    elif 'pairs' in hist_data and len(hist_data['pairs']) > 1:
+    elif 'pairs' in hist_data and len(hist_data['pairs']) > 1: # configuration file's approach
       pairs = hist_data['pairs']
+
+      # Summary list:
       lags = []
       like = []
       lnJ = []
       ln_fac = []
+
       for pair in pairs:
         lag = float(pair['lag'])
         h1 = pair['hist1']
@@ -159,7 +163,7 @@ class PoissonLagLikelihood_v7(Node):
 
         # It is no longer meaningful to cache the ln(n!) values while most of those are non-integers.
         sum_lnJ, sum_ln_n_fac, sum_ln_m_fac = self.total_sum_lnJ_gammaln_calculator(pair) 
-        sum_ln_fac = sum_ln_n_fac + sum_ln_m_fac
+        sum_ln_fac = sum_ln_n_fac + sum_ln_m_fac # only for recording 
         total_log_likelihood = sum_lnJ - sum_ln_fac
 
         if not np.isfinite(total_log_likelihood):
@@ -172,6 +176,7 @@ class PoissonLagLikelihood_v7(Node):
           like.append(total_log_likelihood)
           lnJ.append(sum_lnJ)
           ln_fac.append(sum_ln_fac)
+          
       result = {
         'possible_time_lag_list': np.asarray(lags, dtype=np.float64),
         'log_likelihood_list': np.asarray(like, dtype=np.float64),

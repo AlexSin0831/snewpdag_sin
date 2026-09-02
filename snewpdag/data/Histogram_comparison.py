@@ -42,7 +42,7 @@ PairtimeSeriesToHist_Smoothing_Toy = load_plugin('PairTimeSeriesToHist_Smoothing
 # DEFAULT PARAMETERS
 TRUE_LAG = 0.022
 HISTOGRAM_BIN_WIDTH = 0.002 # s # IceCube default histogram bin-width = 2ms
-DETECTOR_PAIR = ('SuperK', 'JUNO') # (det1, det2)
+DETECTOR_PAIR = ('IceCube', 'LVD') # (det1, det2)
 WINDOW_SIZE = 2.0 #s
 # Generate histogram for IceCube directly --> Speed up the algo A LOT
 HIST1_IC = True 
@@ -59,7 +59,7 @@ MEAN_CORRECTION = False
 
 # Gaussian Normal Distribution (GND) parameters:
 TOY = True # Use Gaussian as our kernel
-SIGMA_GND = 0.005 # second 
+SIGMA_GND = 0.01 # second 
 
 SEED = 1234
 DETECTOR_TOTAL_EVENT_SIGNALS = { # per 7 seconds

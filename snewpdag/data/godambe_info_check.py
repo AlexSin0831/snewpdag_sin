@@ -1,6 +1,6 @@
 """
 Read all the "SINGLE-ROW" files from each trial, combine them into one table. 
-Calculate the variance of the score_ref and the mean of the H_ref and H_best.
+Calculate the variance of score_ref and the mean of H_ref.
 """
 
 import argparse
@@ -8,11 +8,6 @@ import csv
 from pathlib import Path 
 
 import numpy as np 
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas 
-from matplotlib.figure import Figure 
-
-PROJECT_ROOT = Path(__file__).parents[2]
-DEFAULT_MC_DIR = PROJECT_ROOT / 'output' / 'mc_v9_test'
 
 def parse_args():
   parser = argparse.ArgumentParser(description='Compute the terms of godambe information')
@@ -59,20 +54,39 @@ def write_combined_csv(rows, fieldnames, combined_csv):
     writer.writerows(rows)
 
 def calculator(rows): 
-  H_obs_list = []
+  required_fields = {'H_ref', 'score_ref'}
+  missing_fields = required_fields.difference(rows[0])
+  if missing_fields:
+    raise RuntimeError(
+        'Trial CSV files are missing required fields: {}'.format(
+            ', '.join(sorted(missing_fields))))
+
   H_ref_list = []
   score_ref_list = []
 
   for row in rows: 
-    H_obs_list.append(float(row['H_obs']))
-    H_ref_list.append(float(row['H_ref']))
-    score_ref_list.append(float(row['score_ref']))
-   
-  H_obs_expected = np.mean(H_obs_list)
+    H_ref = float(row['H_ref'])
+    score_ref = float(row['score_ref'])
+    if np.isfinite(H_ref) and np.isfinite(score_ref):
+      H_ref_list.append(H_ref)
+      score_ref_list.append(score_ref)
+
+  if len(score_ref_list) < 2:
+    raise RuntimeError(
+        'At least two trials with finite H_ref and score_ref are required')
+
   H_ref_expected = np.mean(H_ref_list)
   J_hat = np.var(score_ref_list, ddof=1)
+  mean_score = np.mean(score_ref_list)
+  mean_score_standard_error = np.sqrt(J_hat / len(score_ref_list))
 
-  return H_obs_expected, H_ref_expected, J_hat 
+  if not np.isfinite(H_ref_expected) or H_ref_expected <= 0.0:
+    raise RuntimeError(
+        'The mean reference curvature must be finite and positive; got {}'.format(
+            H_ref_expected))
+
+  return (H_ref_expected, J_hat, mean_score,
+          mean_score_standard_error, len(score_ref_list))
 
 def main(): 
     args = parse_args()
@@ -89,16 +103,17 @@ def main():
 
     write_combined_csv(rows, fieldnames, args.combined_csv)
 
-    H_obs_expected, H_ref_expected, J_hat = calculator(rows)
+    (H_ref_expected, J_hat, mean_score,
+     mean_score_standard_error, number_of_trials) = calculator(rows)
 
     sigma_godambe = np.sqrt(J_hat)/H_ref_expected
 
-    print('The expected value of curvature (best lag) = {:.4f}'.format(H_obs_expected))
-    print('The expected value of curvature (true lag) = {:.4f}'.format(H_ref_expected))
-    print('The variance of the score function (true lag) = {:.4f}'.format(J_hat))
+    print('Number of finite trials = {}'.format(number_of_trials))
+    print('The expected value of curvature (true lag) = {:.4f} (ms^-2)'.format(H_ref_expected / 1000**2))
+    print('The variance of the score function (true lag) = {:.4f} (ms^-2)'.format(J_hat / 1000**2))
+    print('The mean score function (true lag) = {:.4f} +/- {:.4f} (ms^-1)'.format(
+        mean_score / 1000, mean_score_standard_error / 1000))
     print('Standard Error (Godambe) = {:.4f} (ms)'.format(sigma_godambe*1000))
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
    main()
-
-  

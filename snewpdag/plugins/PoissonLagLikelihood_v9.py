@@ -3,7 +3,7 @@ PoissonLagLikelihood_v8           : Calculate the Poisson likelihood of a histog
                                     Expect to have FLOAT values in the histograms due to the smoothing. 
                                     Therefore, we used interpolation to estimate the values of lnJ(n,m), where n and m are floats.
                                     On top of v7, we will add a correction term for low count bins, in order to tackle the normalisation problem
-                                    But the correction term is not mandatory.
+                                    Include a lower bound when doing the marginalisation! 
 
 configuration: 
     in_hist_field                 : field name of the histogram pair
@@ -14,10 +14,9 @@ configuration:
     sen_2                         : sensitivity of det2 (per second)
     bg_1                          : background rate of det1 (per second)
     bg_2                          : background rate of det2 (per second)
-
-            (Correction)
     cutoff                        : the minimum number of events that we can avoid the correction term
     correction                    : True / False
+    lower_bound                  : the lower bound of lambda while doing the marginalisation 
     c1                            : coefficient of the first-order inverse polynomial of det1
     c2                            : coefficient of the first-order inverse polynomial of det2
 """
@@ -32,9 +31,41 @@ from snewpdag.dag import Node
 from snewpdag.dag.lib import fetch_field, store_field
 from snewpdag.plugins.RecursionIntegral import buildLogJTable
 
-def lnJ_table_generator(nmax, mmax, a, b, p, q):
-  return buildLogJTable(nmax, mmax, a, b, p, q)
+def log_power(x, n):
+  if n == 0:
+    return 0.0
+  if x <= 0.0:
+    return -np.inf
+  return n * np.log(x)
 
+# The most important and expensive calculation part: 
+def lnJ_table_generator(nmax, mmax, a, b, p, q, lower_bound): 
+  s = a + p 
+  if s <= 0.0:
+    return np.full((nmax+1, mmax+1), -np.inf)
+  ln_s = np.log(s) if s > 0.0 else -np.inf 
+  ln_a = np.log(a) if a > 0.0 else -np.inf
+  ln_p = np.log(p) if p > 0.0 else -np.inf
+
+  # Initialisation of the table: 
+  lnJ_table = np.full((nmax+1, mmax+1), -np.inf) 
+
+  for n in range(nmax+1): 
+    for m in range(mmax+1): 
+      terms = []
+
+      # first term: 
+      terms.append(-(a+p)*lower_bound + log_power(a*lower_bound + b, n) + log_power(p*lower_bound + q, m) - ln_s)
+      # second term: 
+      if n > 0 and a > 0.0: 
+        terms.append(np.log(n) + ln_a - ln_s + lnJ_table[n-1,m])
+      # third term:
+      if m > 0 and p > 0.0: 
+        terms.append(np.log(m) + ln_p - ln_s + lnJ_table[n,m-1])
+      
+      lnJ_table[n,m] = sc.logsumexp(terms)
+  
+  return lnJ_table
 
 class PoissonLagLikelihood_v8(Node):
   """Evaluate the likelihood for one histogram pair at one guessed lag."""
@@ -49,11 +80,14 @@ class PoissonLagLikelihood_v8(Node):
 
     # if the count of one detector is lower than this cutoff, we will add the correction term:
     self.cutoff = kwargs.pop('cutoff',3.0) 
-    self.correction = kwargs.pop('correction', False)
+
+    self.lower_bound = kwargs.pop('lower_bound1',0.001) 
+
 
     # coefficients for the first order inverse polynomial:
     self.c1 = kwargs.pop('c1', 0.00045)
     self.c2 = kwargs.pop('c2', 0.00045)
+
     self.lnJ_table_cache = {}
     super().__init__(**kwargs)
 
@@ -135,28 +169,30 @@ class PoissonLagLikelihood_v8(Node):
 
     lnJ_table = self.retrieve_lnJ_table(nmax, mmax, a, b, p, q)
 
+    # detector pair's first-order inverse polynomial coefficient:
+    k1 = self.c1 + self.c2
+
+
     total_log_likelihood = 0.0
     total_lnJ = 0.0
     total_ln_fac = 0.0
     total_correction = 0.0
 
-    # detector pair's first-order inverse polynomial coefficient:
-    k1 = self.c1 + self.c2
-
     for n, m in zip(h1, h2):
-        # Base likelihood for this individual bin:
+        # Base likelihood for this individual bin.
         log_J = self.table_interpolation_calculator(lnJ_table, n, m)
+
         log_fac = sc.gammaln(n + 1.0) + sc.gammaln(m + 1.0)
 
-        # Correction:
         log_correction = 0.0
+
         # Correct whenever either detector is in the low-count regime.
-        apply_correction = self.correction == True and (n < self.cutoff or m < self.cutoff)  
+        apply_correction = n < self.cutoff or m < self.cutoff
 
         if apply_correction and k1 > 0.0:
             x = n + m - 1.0 
 
-            if n > b and m > q: 
+            if n > a * self.lower_bound + b and m > p * self.lower_bound + q: 
                 log_Q = sc.gammaln(x + 1.0) - (x + 1.0) * np.log(a + p)
                 
                 log_ratio = (

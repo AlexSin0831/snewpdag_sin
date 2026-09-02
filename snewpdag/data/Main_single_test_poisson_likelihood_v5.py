@@ -68,7 +68,7 @@ COARSE_TIME_LAG_STEP_SIZE = 0.005 # s
 FINE_TIME_LAG_STEP_SIZE = 0.0001 #s
 
 HISTOGRAM_BIN_WIDTH = 0.002 # s # IceCube default histogram bin-width = 2ms
-DETECTOR_PAIR = ('SuperK', 'JUNO') # (det1, det2)
+DETECTOR_PAIR = ('SuperK', 'SNOPLUS') # (det1, det2)
 WINDOW_START = -0.6
 WINDOW_SIZE = 9.2 #s
 SEED = 1000

@@ -77,9 +77,9 @@ SCAN_HIGH = 0.1 # s    # Remove physical wall: 0.042
 COARSE_TIME_LAG_STEP_SIZE = 0.005 # s
 FINE_TIME_LAG_STEP_SIZE = 0.0001 #s
 HISTOGRAM_BIN_WIDTH = 0.002 # s # IceCube default histogram bin-width = 2ms
-DETECTOR_PAIR = ('IceCube', 'LVD') # (det1, det2)
-WINDOW_START = -0.6
-WINDOW_SIZE = 9.2 #s
+DETECTOR_PAIR = ('SuperK', 'JUNO') # (det1, det2)
+WINDOW_START = -1.0
+WINDOW_SIZE = 9.6 #s
 SEED = 1001
 
 SMOOTHING = True
@@ -782,7 +782,9 @@ def save_trial_result(args,
                       standard_error_2,
                       output_filename,
                       left_error,
-                      right_error):
+                      right_error,
+                      standard_error_3,
+                      H_ref, score_ref):
 
   args.results_dir.mkdir(parents=True, exist_ok=True)
   result_filename = args.results_dir / build_result_filename(detector_pair, args.seed)
@@ -797,21 +799,26 @@ def save_trial_result(args,
   else:
     pull_2 = np.nan
 
+  if standard_error_3 > 0.0 and np.isfinite(standard_error_3):
+    pull_3 = (best_lag - args.true_lag) / standard_error_3
+  else:
+    pull_3 = np.nan
+
   row = {
       'seed': args.seed,
       'det1': detector_pair[0],
       'det2': detector_pair[1],
       'true_lag': args.true_lag,
       'best_lag': best_lag,
-      # Keep the original names as aliases for existing v7 consumers.
-      'sigma': standard_error_1,
-      'pull': pull_1,
       'sigma1': standard_error_1,
       'sigma2': standard_error_2,
       'pull1': pull_1,
       'pull2': pull_2,
       'left_error': left_error,
       'right_error': right_error,
+      'sigma3': standard_error_3,
+      'H_ref': H_ref,
+      'score_ref': score_ref,
       'hist_bin_width': args.hist_bin_width,
       'coarse_lag_step': args.coarse_lag_step,
       'fine_lag_step': args.fine_lag_step,
@@ -896,17 +903,16 @@ def main():
     args.fine_lag_step, args.hist_bin_width, args.window_size,
     args.scan_low, args.scan_high, args.seed
   )
-  (best_lag, standard_error_1, standard_error_2,
-   left_error_bound_2, right_error_bound_2) = plot_scan_and_find_best_lag(
-      scan_data, args.true_lag, output_filename, detector_pair,
-      args.hist_bin_width, WINDOW_START, args.window_size,
-      args.smoothing, args.toy)
+  best_lag, standard_error_1, standard_error_2, left_error_bound_2, right_error_bound_2, standard_error_3, H_ref, score_ref = plot_scan_and_find_best_lag(scan_data, args.true_lag, output_filename, detector_pair,
+                                                                                                                                args.hist_bin_width, WINDOW_START, args.window_size,
+                                                                                                                                args.smoothing, args.toy)
+      
 
 
   # Generate a csv file to save stuff!
-  result_filename, pull_1, pull_2 = save_trial_result(
-      args, detector_pair, best_lag, standard_error_1, standard_error_2,
-      output_filename, left_error_bound_2, right_error_bound_2)
+  result_filename, pull_1, pull_2 = save_trial_result(args, detector_pair, best_lag, standard_error_1, standard_error_2,
+      output_filename, left_error_bound_2, right_error_bound_2, standard_error_3, H_ref, score_ref)
+      
 
   print('---------------------------------------')
   print('Summary:')
